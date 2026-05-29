@@ -1,0 +1,45 @@
+<div class="container">
+  <div class="page-header">
+    <h1><%= source.name %></h1>
+    <div class="header-actions">
+      <% if (source.ai_status !== 'done' && source.extracted_text) { %>
+        <form method="POST" action="/sources/<%= source.id %>/extract">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-primary">🤖 Extract with AI</button>
+        </form>
+      <% } %>
+      <form method="POST" action="/sources/<%= source.id %>/delete">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn-danger" onclick="return confirm('Delete this source?')">Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="meta-row">
+      <div class="meta-item"><strong>Type</strong><span><%= source.source_type || '—' %></span></div>
+      <div class="meta-item"><strong>Extraction</strong>
+        <span class="<%= source.extraction_status === 'done' ? 'badge-success' : 'badge-warning' %>">
+          <%= source.extraction_status %>
+        </span>
+      </div>
+      <div class="meta-item"><strong>AI Status</strong>
+        <span class="<%= source.ai_status === 'done' ? 'badge-success' : source.ai_status === 'processing' ? 'badge-warning' : 'badge-muted' %>">
+          <%= source.ai_status %>
+        </span>
+      </div>
+      <div class="meta-item"><strong>Uploaded</strong><span><%= new Date(source.created_at).toLocaleString() %></span></div>
+    </div>
+  </div>
+
+  <% if (source.extracted_text) { %>
+    <div class="section">
+      <div class="section-header"><h3>Extracted Text</h3></div>
+      <pre class="extracted-text"><%= source.extracted_text.slice(0, 5000) %><%= source.extracted_text.length > 5000 ? '\n\n[... truncated for display ...]' : '' %></pre>
+    </div>
+  <% } else { %>
+    <div class="notice notice-warning">
+      No text extracted from this file. This may be an image — click "Extract with AI" to use Claude Vision.
+    </div>
+  <% } %>
+</div>

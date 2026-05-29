@@ -1,0 +1,51 @@
+<div class="container">
+  <div class="page-header">
+    <h1>Gap Analysis</h1>
+    <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+  </div>
+
+  <% if (member.role !== 'viewer') { %>
+    <form method="POST" action="/projects/<%= project.id %>/visualize/gap-analysis" style="margin-bottom:20px;">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %> Gap Analysis</button>
+      <% if (generated_at) { %><span class="muted" style="margin-left:10px;">Last generated: <%= new Date(generated_at).toLocaleString() %></span><% } %>
+    </form>
+  <% } %>
+
+  <% if (!insight) { %>
+    <div class="empty-state"><p>No gap analysis yet. Click "Generate" to create one with AI.</p></div>
+  <% } else { %>
+    <div class="g2" style="margin-bottom:18px;">
+      <div class="card"><h3>Current State</h3><p><%= insight.current_state %></p></div>
+      <div class="card"><h3>Future State</h3><p><%= insight.future_state %></p></div>
+    </div>
+
+    <% if (insight.gaps && insight.gaps.length) { %>
+      <div class="section">
+        <div class="section-header"><h3>Identified Gaps</h3></div>
+        <div class="gap-list">
+          <% for (const g of insight.gaps) { %>
+            <div class="gap-item">
+              <div class="gap-header">
+                <strong><%= g.area %></strong>
+                <span class="badge-<%= g.priority==='high'?'danger':g.priority==='medium'?'warning':'muted' %>"><%= g.priority %></span>
+              </div>
+              <div class="gap-row"><span class="gap-label">Current:</span> <%= g.current %></div>
+              <div class="gap-row"><span class="gap-label">Desired:</span> <%= g.desired %></div>
+              <div class="gap-row"><span class="gap-label">Gap:</span> <%= g.gap %></div>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    <% } %>
+
+    <% if (insight.recommendations && insight.recommendations.length) { %>
+      <div class="section">
+        <div class="section-header"><h3>Recommendations</h3></div>
+        <ul class="reco-list">
+          <% for (const r of insight.recommendations) { %><li><%= r %></li><% } %>
+        </ul>
+      </div>
+    <% } %>
+  <% } %>
+</div>

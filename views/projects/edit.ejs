@@ -1,0 +1,33 @@
+<div class="form-page">
+  <div class="page-header">
+    <h1>Edit Project</h1>
+    <a href="/projects/<%= project.id %>" class="btn-outline">Cancel</a>
+  </div>
+
+  <form method="POST" action="/projects/<%= project.id %>/edit" class="card">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="form-group">
+      <label class="form-label">Project Name *</label>
+      <input type="text" name="name" class="form-input" value="<%= project.name %>" required>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea name="description" class="form-input form-textarea" rows="3"><%= project.description || '' %></textarea>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Tags <span class="form-hint">(comma-separated)</span></label>
+      <input type="text" name="tags" class="form-input" value="<%= (() => { try { return JSON.parse(project.tags || '[]').join(', '); } catch(e) { return ''; } })() %>">
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Save Changes</button>
+      <form method="POST" action="/projects/<%= project.id %>/archive" style="display:inline;">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn-outline" onclick="return confirm('Archive this project?')">Archive</button>
+      </form>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,27 @@
+<div class="container">
+  <%- include('../partials/insights_nav') %>
+  <div class="page-header" style="margin-top:20px;">
+    <h1>Acceptance Criteria</h1>
+    <% if (member.role !== 'viewer') { %>
+      <form method="POST" action="/projects/<%= project.id %>/acceptance-criteria">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %></button>
+      </form>
+    <% } %>
+  </div>
+  <% if (!insight) { %>
+    <div class="empty-state"><p>Generate Gherkin-style acceptance criteria with AI.</p></div>
+  <% } else { const c = insight.content; %>
+    <% if (c.criteria) { %>
+      <% for (const cr of c.criteria) { %>
+        <div class="ac-block card" style="margin-bottom:14px;">
+          <h4><%= cr.requirement_title %></h4>
+          <% if (cr.given && cr.given.length) { %><p><strong>Given</strong> <%= cr.given.join(' AND ') %></p><% } %>
+          <% if (cr.when  && cr.when.length)  { %><p><strong>When</strong>  <%= cr.when.join(' AND ')  %></p><% } %>
+          <% if (cr.then  && cr.then.length)  { %><p><strong>Then</strong>  <%= cr.then.join(' AND ')  %></p><% } %>
+          <% if (cr.notes) { %><p class="muted"><small><%= cr.notes %></small></p><% } %>
+        </div>
+      <% } %>
+    <% } %>
+  <% } %>
+</div>

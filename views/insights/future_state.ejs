@@ -1,0 +1,43 @@
+<div class="container">
+  <%- include('../partials/insights_nav') %>
+
+  <div class="page-header" style="margin-top:20px;">
+    <h1>Future State</h1>
+    <% if (member.role !== 'viewer') { %>
+      <form method="POST" action="/projects/<%= project.id %>/future-state">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %></button>
+      </form>
+    <% } %>
+  </div>
+
+  <% if (!insight) { %>
+    <div class="empty-state"><p>Generate a future state analysis with AI.</p></div>
+  <% } else { const c = insight.content; %>
+    <div class="card" style="margin-bottom:16px;">
+      <h3>Narrative</h3>
+      <p><%= c.narrative %></p>
+    </div>
+    <% if (c.scenarios && c.scenarios.length) { %>
+      <div class="section">
+        <div class="section-header"><h3>Scenarios</h3></div>
+        <% for (const s of c.scenarios) { %>
+          <div class="card" style="margin-bottom:12px;">
+            <h4><%= s.title %></h4>
+            <p><%= s.description %></p>
+            <% if (s.mermaid_syntax) { %><div class="mermaid"><%= s.mermaid_syntax %></div><% } %>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+    <% if (c.key_changes && c.key_changes.length) { %>
+      <div class="section"><div class="section-header"><h3>Key Changes</h3></div>
+        <ul class="reco-list"><% for (const k of c.key_changes) { %><li><%= k %></li><% } %></ul>
+      </div>
+    <% } %>
+  <% } %>
+</div>
+<% if (insight && insight.content && insight.content.scenarios) { %>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true});</script>
+<% } %>

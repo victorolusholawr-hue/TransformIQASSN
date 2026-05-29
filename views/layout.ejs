@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title + ' — TransformIQ' : 'TransformIQ' %></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <%- typeof style !== 'undefined' ? style : '' %>
+  <script>
+    // Apply saved theme before body renders to prevent flash
+    (function(){
+      const t = localStorage.getItem('theme') ||
+        (window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+
+<%- include('partials/navbar') %>
+
+<div class="page-body">
+  <%- include('partials/flash') %>
+  <%- body %>
+</div>
+
+<%- typeof script !== 'undefined' ? script : '' %>
+
+<script>
+function toggleTheme(){
+  const h = document.documentElement;
+  const next = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  h.setAttribute('data-theme', next);
+  const btn = document.querySelector('.theme-btn');
+  if(btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('theme', next);
+}
+// Sync button icon on load
+document.addEventListener('DOMContentLoaded', function(){
+  const btn = document.querySelector('.theme-btn');
+  if(btn) btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙';
+});
+</script>
+</body>
+</html>

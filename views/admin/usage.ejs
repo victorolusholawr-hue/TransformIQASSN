@@ -1,0 +1,95 @@
+<div class="container">
+  <div class="page-header" style="margin-top:20px;">
+    <h1>Admin — Usage & Settings</h1>
+  </div>
+
+  <div class="section" style="margin-bottom:24px;">
+    <div class="section-header"><h3>Token Usage (This Month)</h3></div>
+    <div class="entity-grid" style="margin-top:16px;">
+      <div class="entity-card">
+        <div class="entity-card-icon" style="background:#72246c;">📥</div>
+        <div class="entity-card-label">Input Tokens</div>
+        <div class="entity-card-count"><%= stats.monthly_input ? stats.monthly_input.toLocaleString() : '0' %></div>
+      </div>
+      <div class="entity-card">
+        <div class="entity-card-icon" style="background:#5a1c55;">📤</div>
+        <div class="entity-card-label">Output Tokens</div>
+        <div class="entity-card-count"><%= stats.monthly_output ? stats.monthly_output.toLocaleString() : '0' %></div>
+      </div>
+      <div class="entity-card">
+        <div class="entity-card-icon" style="background:#c2188b;">🤖</div>
+        <div class="entity-card-label">API Calls</div>
+        <div class="entity-card-count"><%= stats.monthly_calls ? stats.monthly_calls.toLocaleString() : '0' %></div>
+      </div>
+      <div class="entity-card">
+        <div class="entity-card-icon" style="background:#41b6e6;">⏱</div>
+        <div class="entity-card-label">Last Updated</div>
+        <div class="entity-card-count" style="font-size:0.85rem;">
+          <% if (stats.monthly_updated) { %>
+            <%= new Date(stats.monthly_updated).toLocaleString() %>
+          <% } else { %>
+            —
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-bottom:24px;">
+    <div class="section-header"><h3>Per-Project Breakdown</h3></div>
+    <% if (!projectStats || !projectStats.length) { %>
+      <div class="empty-state"><p>No per-project usage recorded yet.</p></div>
+    <% } else { %>
+      <table class="students-table" style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th>Project ID</th>
+            <th>Input Tokens</th>
+            <th>Output Tokens</th>
+            <th>API Calls</th>
+            <th>Last Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const row of projectStats) { %>
+            <tr>
+              <td><span class="badge-muted" style="font-size:0.78rem;"><%= row.stat_key.replace('project_', '') %></span></td>
+              <td><%= row.input_tokens ? row.input_tokens.toLocaleString() : '0' %></td>
+              <td><%= row.output_tokens ? row.output_tokens.toLocaleString() : '0' %></td>
+              <td><%= row.calls ? row.calls.toLocaleString() : '0' %></td>
+              <td class="muted" style="font-size:0.82rem;"><%= row.updated_at ? new Date(row.updated_at).toLocaleString() : '—' %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h3>Rate Limit Settings</h3></div>
+    <p class="muted" style="margin-bottom:16px;">Controls how many AI calls any single user can make per project per hour.</p>
+    <form method="POST" action="/admin/usage">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Max Extraction Calls / hour</label>
+          <input type="number" name="max_extractions" class="form-input" min="1" max="100"
+            value="<%= limits.max_extractions || 10 %>">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Max Insight Calls / hour</label>
+          <input type="number" name="max_insights" class="form-input" min="1" max="100"
+            value="<%= limits.max_insights || 5 %>">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Max Export Calls / hour</label>
+          <input type="number" name="max_exports" class="form-input" min="1" max="100"
+            value="<%= limits.max_exports || 5 %>">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">Save Settings</button>
+      </div>
+    </form>
+  </div>
+</div>

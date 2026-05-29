@@ -1,0 +1,3 @@
+<% const type='stakeholders', label='Stakeholders', icon='👥', color='cyan', showStatusFilter=false; %>
+<% const statusOptions='[]'.replace('[','').replace(']','').split(',').filter(Boolean); %>
+<%- include('_list', { type, label, icon, color, entities, project, member, filters, showStatusFilter, statusOptions, csrfToken }) %>

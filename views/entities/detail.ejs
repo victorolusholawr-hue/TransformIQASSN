@@ -1,0 +1,107 @@
+<div class="container">
+  <div class="page-header">
+    <h1><%= entity.title || entity.name %></h1>
+    <div class="header-actions">
+      <a href="/projects/<%= project.id %>/<%= type %>" class="btn-outline">← <%= type.replace(/_/g,' ') %></a>
+      <% if (member.role !== 'viewer') { %>
+        <form method="POST" action="/projects/<%= project.id %>/<%= type %>/<%= entity.id %>/delete">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-danger" onclick="return confirm('Delete?')">Delete</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <!-- Badges row -->
+    <div class="entity-badges" style="margin-bottom:14px;">
+      <% if (entity.confidence) { %><span class="confidence-badge">Confidence: <%= Math.round(entity.confidence * 100) %>%</span><% } %>
+      <% if (entity.status)     { %><span class="badge-<%= entity.status === 'confirmed' || entity.status === 'approved' ? 'success' : entity.status === 'rejected' ? 'danger' : 'muted' %>"><%= entity.status %></span><% } %>
+      <% if (entity.priority)   { %><span class="badge-<%= entity.priority === 'high' ? 'danger' : entity.priority === 'medium' ? 'warning' : 'muted' %>"><%= entity.priority %></span><% } %>
+      <% if (entity.req_type)   { %><span class="badge-info"><%= entity.req_type %></span><% } %>
+      <% if (entity.category)   { %><span class="badge-info"><%= entity.category %></span><% } %>
+      <% if (entity.system_type){ %><span class="badge-info"><%= entity.system_type %></span><% } %>
+    </div>
+
+    <!-- Description -->
+    <% if (entity.description) { %>
+      <div class="form-group"><strong>Description</strong><p style="margin-top:6px;"><%= entity.description %></p></div>
+    <% } %>
+
+    <!-- Type-specific fields -->
+    <% if (entity.role)               { %><div class="meta-row2"><strong>Role:</strong> <%= entity.role %></div><% } %>
+    <% if (entity.organization)       { %><div class="meta-row2"><strong>Organisation:</strong> <%= entity.organization %></div><% } %>
+    <% if (entity.influence !== null && entity.influence !== undefined) { %><div class="meta-row2"><strong>Influence:</strong> <%= entity.influence %>/5</div><% } %>
+    <% if (entity.interest !== null && entity.interest !== undefined)   { %><div class="meta-row2"><strong>Interest:</strong> <%= entity.interest %>/5</div><% } %>
+    <% if (entity.likelihood)         { %><div class="meta-row2"><strong>Likelihood:</strong> <%= entity.likelihood %>/5</div><% } %>
+    <% if (entity.impact)             { %><div class="meta-row2"><strong>Impact:</strong> <%= entity.impact %>/5</div><% } %>
+    <% if (entity.mitigation)         { %><div class="meta-row2"><strong>Mitigation:</strong> <%= entity.mitigation %></div><% } %>
+    <% if (entity.owner)              { %><div class="meta-row2"><strong>Owner:</strong> <%= entity.owner %></div><% } %>
+    <% if (entity.rationale)          { %><div class="meta-row2"><strong>Rationale:</strong> <%= entity.rationale %></div><% } %>
+    <% if (entity.decision_maker)     { %><div class="meta-row2"><strong>Decision Maker:</strong> <%= entity.decision_maker %></div><% } %>
+    <% if (entity.target_value)       { %><div class="meta-row2"><strong>Target:</strong> <%= entity.target_value %></div><% } %>
+    <% if (entity.measurement_method) { %><div class="meta-row2"><strong>Measurement:</strong> <%= entity.measurement_method %></div><% } %>
+    <% if (entity.frequency)          { %><div class="meta-row2"><strong>Frequency:</strong> <%= entity.frequency %></div><% } %>
+
+    <!-- Mermaid diagram for processes -->
+    <% if (entity.mermaid_syntax) { %>
+      <div class="section" style="margin-top:16px;">
+        <h3>Process Diagram</h3>
+        <div class="mermaid"><%= entity.mermaid_syntax %></div>
+      </div>
+    <% } %>
+
+    <!-- Process steps -->
+    <% if (entity.steps && Array.isArray(entity.steps) && entity.steps.length) { %>
+      <div class="section" style="margin-top:16px;">
+        <h3>Steps</h3>
+        <ol class="steps-list">
+          <% for (const step of entity.steps) { %>
+            <li><strong><%= step.actor || '' %></strong> <%= step.action %></li>
+          <% } %>
+        </ol>
+      </div>
+    <% } %>
+
+    <!-- System integrations -->
+    <% if (entity.integrations && Array.isArray(entity.integrations) && entity.integrations.length) { %>
+      <div class="meta-row2"><strong>Integrations:</strong> <%= entity.integrations.join(', ') %></div>
+    <% } %>
+
+    <!-- Source quote -->
+    <% if (entity.source_quote) { %>
+      <blockquote class="source-quote">"<%= entity.source_quote %>"</blockquote>
+    <% } %>
+  </div>
+
+  <!-- Edit form -->
+  <% if (member.role !== 'viewer') { %>
+  <div class="section">
+    <div class="section-header"><h3>Edit</h3></div>
+    <form method="POST" action="/projects/<%= project.id %>/<%= type %>/<%= entity.id %>/edit" class="card">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <% if (entity.title !== undefined) { %>
+        <div class="form-group"><label class="form-label">Title</label>
+        <input type="text" name="title" class="form-input" value="<%= entity.title %>"></div>
+      <% } %>
+      <% if (entity.name !== undefined && type !== 'requirements') { %>
+        <div class="form-group"><label class="form-label">Name</label>
+        <input type="text" name="name" class="form-input" value="<%= entity.name %>"></div>
+      <% } %>
+      <div class="form-group"><label class="form-label">Description</label>
+      <textarea name="description" class="form-input form-textarea" rows="3"><%= entity.description || '' %></textarea></div>
+      <% if (entity.status !== undefined) { %>
+        <div class="form-group"><label class="form-label">Status</label>
+        <input type="text" name="status" class="form-input" value="<%= entity.status %>"></div>
+      <% } %>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+  <% } %>
+</div>
+<% if (entity.mermaid_syntax) { %>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'default'});</script>
+<% } %>

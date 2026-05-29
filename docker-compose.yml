@@ -1,0 +1,38 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8082:3000"
+    env_file: .env
+    environment:
+      - DB_SERVER=db
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports:
+      - "1434:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "${DB_PASSWORD}"
+      MSSQL_PID: "Express"
+    volumes:
+      - db-data:/var/opt/mssql
+    healthcheck:
+      test: >
+        /opt/mssql-tools18/bin/sqlcmd
+        -S localhost -U sa -P "$$SA_PASSWORD"
+        -No -Q "SELECT 1"
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 45s
+
+volumes:
+  db-data:

@@ -1,0 +1,47 @@
+<div class="container">
+  <%- include('../partials/insights_nav') %>
+
+  <div class="page-header" style="margin-top:20px;">
+    <h1>Delivery Roadmap</h1>
+    <% if (member.role !== 'viewer') { %>
+      <form method="POST" action="/projects/<%= project.id %>/roadmap">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %> Roadmap</button>
+      </form>
+    <% } %>
+  </div>
+
+  <% if (!Object.keys(phases).length) { %>
+    <div class="empty-state"><p>Generate a roadmap to populate tasks, or add tasks manually.</p></div>
+  <% } else { %>
+    <% for (const [phaseName, tasks] of Object.entries(phases)) { %>
+      <div class="phase-block">
+        <div class="phase-header"><h3><%= phaseName %></h3><span class="badge-muted"><%= tasks.length %> tasks</span></div>
+        <div class="task-list">
+          <% for (const task of tasks) { %>
+            <div class="task-item task-status-<%= task.status %>">
+              <div class="task-title"><%= task.req_title %></div>
+              <div class="task-meta">
+                <select class="task-status-select" onchange="updateTask('<%= task.id %>',{status:this.value})">
+                  <% for (const s of ['todo','in_progress','done','blocker','deferred','cancelled']) { %>
+                    <option value="<%= s %>" <%= task.status===s?'selected':'' %>><%= s.replace('_',' ') %></option>
+                  <% } %>
+                </select>
+                <% if (task.owner) { %><span class="badge-muted"><%= task.owner %></span><% } %>
+              </div>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    <% } %>
+  <% } %>
+</div>
+<script>
+async function updateTask(id, data) {
+  await fetch('/projects/<%= project.id %>/roadmap/update-task', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ _csrf: '<%= csrfToken %>', task_id: id, ...data }),
+  });
+}
+</script>

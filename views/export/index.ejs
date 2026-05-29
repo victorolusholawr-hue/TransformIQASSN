@@ -1,0 +1,106 @@
+<div class="container">
+  <div class="page-header" style="margin-top:20px;">
+    <h1>Export Documents</h1>
+  </div>
+
+  <div class="section" style="margin-bottom:28px;">
+    <div class="section-header"><h3>Generate Documents</h3></div>
+    <p class="muted" style="margin:8px 0 20px;">Build structured documents from extracted entities. All exports use project data captured in the requirements pipeline.</p>
+
+    <div class="entity-grid">
+      <div class="card" style="text-align:center;padding:24px 16px;">
+        <div style="font-size:2rem;margin-bottom:8px;">📄</div>
+        <h4 style="margin-bottom:6px;">Business Requirements</h4>
+        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">Full BRD with requirements, stakeholders, processes, and decisions</p>
+        <form method="POST" action="/projects/<%= project.id %>/export/brd">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-primary btn-sm">Download BRD (.docx)</button>
+        </form>
+      </div>
+
+      <div class="card" style="text-align:center;padding:24px 16px;">
+        <div style="font-size:2rem;margin-bottom:8px;">🔧</div>
+        <h4 style="margin-bottom:6px;">Functional Requirements</h4>
+        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">Technical FRD with functional requirements and system integrations</p>
+        <form method="POST" action="/projects/<%= project.id %>/export/frd">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-primary btn-sm">Download FRD (.docx)</button>
+        </form>
+      </div>
+
+      <div class="card" style="text-align:center;padding:24px 16px;">
+        <div style="font-size:2rem;margin-bottom:8px;">⚠️</div>
+        <h4 style="margin-bottom:6px;">Risk Register</h4>
+        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">Colour-coded Excel risk register with likelihood × impact scores</p>
+        <form method="POST" action="/projects/<%= project.id %>/export/risk-register">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-primary btn-sm">Download Risk Register (.xlsx)</button>
+        </form>
+      </div>
+
+      <div class="card" style="text-align:center;padding:24px 16px;">
+        <div style="font-size:2rem;margin-bottom:8px;">📊</div>
+        <h4 style="margin-bottom:6px;">Executive Summary</h4>
+        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">High-level overview with entity counts, top risks, and key decisions</p>
+        <form method="POST" action="/projects/<%= project.id %>/export/executive-summary">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-primary btn-sm">Download Summary (.docx)</button>
+        </form>
+      </div>
+
+      <% if (futureStateInsight) { %>
+      <div class="card" style="text-align:center;padding:24px 16px;">
+        <div style="font-size:2rem;margin-bottom:8px;">🚀</div>
+        <h4 style="margin-bottom:6px;">Future State Vision</h4>
+        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">AI-generated future state narrative with transformation layers</p>
+        <form method="POST" action="/projects/<%= project.id %>/export/future-state">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-primary btn-sm">Download Future State (.docx)</button>
+        </form>
+      </div>
+      <% } else { %>
+      <div class="card" style="text-align:center;padding:24px 16px;opacity:0.6;">
+        <div style="font-size:2rem;margin-bottom:8px;">🚀</div>
+        <h4 style="margin-bottom:6px;">Future State Vision</h4>
+        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">Generate the Future State insight first to enable this export</p>
+        <a href="/projects/<%= project.id %>/future-state" class="btn-outline btn-sm">Generate Future State →</a>
+      </div>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (documents && documents.length) { %>
+  <div class="section">
+    <div class="section-header"><h3>Export History</h3></div>
+    <table class="students-table" style="margin-top:12px;">
+      <thead>
+        <tr>
+          <th>Document</th>
+          <th>Generated</th>
+          <th>Version</th>
+          <th>Download</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (const doc of documents) { %>
+          <tr>
+            <td>
+              <% const icons = {brd:'📄',frd:'🔧',risk_register:'⚠️',executive_summary:'📊',future_state:'🚀'}; %>
+              <%= icons[doc.doc_type] || '📁' %> <strong><%= doc.doc_type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) %></strong>
+            </td>
+            <td class="muted" style="font-size:0.85rem;"><%= new Date(doc.generated_at).toLocaleString() %></td>
+            <td><span class="badge-muted">v<%= doc.version %></span></td>
+            <td>
+              <% if (doc.file_url) { %>
+                <a href="<%= doc.file_url %>" class="btn-outline btn-sm" download>Download</a>
+              <% } else { %>
+                <span class="muted">—</span>
+              <% } %>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+  <% } %>
+</div>

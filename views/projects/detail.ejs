@@ -1,0 +1,109 @@
+<div class="container">
+  <div class="page-header">
+    <div>
+      <h1><%= project.name %></h1>
+      <% if (project.description) { %><p class="page-sub"><%= project.description %></p><% } %>
+    </div>
+    <div class="header-actions">
+      <% if (member.role !== 'viewer') { %>
+        <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary">+ Upload Source</a>
+        <a href="/projects/<%= project.id %>/edit" class="btn-outline">Edit</a>
+      <% } %>
+      <a href="/projects/<%= project.id %>/export" class="btn-outline">Export</a>
+      <% if (member.role === 'owner') { %>
+        <form method="POST" action="/projects/<%= project.id %>/delete" style="display:inline;">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-danger" onclick="return confirm('Delete this project and all its data? This cannot be undone.')">Delete</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Entity count cards -->
+  <div class="entity-grid">
+    <% const entityTypes = [
+      { key:'requirements',   label:'Requirements',   icon:'📋', color:'indigo' },
+      { key:'stakeholders',   label:'Stakeholders',   icon:'👥', color:'cyan'   },
+      { key:'processes',      label:'Processes',      icon:'⚙️',  color:'green'  },
+      { key:'decisions',      label:'Decisions',      icon:'✅', color:'amber'  },
+      { key:'risks',          label:'Risks',          icon:'⚠️', color:'red'    },
+      { key:'business_rules', label:'Business Rules', icon:'📏', color:'violet' },
+      { key:'systems',        label:'Systems',        icon:'🖥️', color:'blue'   },
+      { key:'kpis',           label:'KPIs',           icon:'📊', color:'pink'   },
+    ]; %>
+    <% for (const et of entityTypes) { %>
+      <a href="/projects/<%= project.id %>/<%= et.key %>" class="entity-card entity-card-<%= et.color %>">
+        <div class="entity-card-icon"><%= et.icon %></div>
+        <div class="entity-card-count"><%= counts[et.key] %></div>
+        <div class="entity-card-label"><%= et.label %></div>
+      </a>
+    <% } %>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="quick-actions">
+    <a href="/projects/<%= project.id %>/sources" class="quick-action">
+      <span class="qa-icon">📁</span>
+      <span>Sources (<%= counts.sources %>)</span>
+    </a>
+    <a href="/projects/<%= project.id %>/graph" class="quick-action">
+      <span class="qa-icon">🕸️</span>
+      <span>Knowledge Graph</span>
+    </a>
+    <a href="/projects/<%= project.id %>/visualize/process-map" class="quick-action">
+      <span class="qa-icon">🗺️</span>
+      <span>Process Map</span>
+    </a>
+    <a href="/projects/<%= project.id %>/visualize/gap-analysis" class="quick-action">
+      <span class="qa-icon">🔍</span>
+      <span>Gap Analysis</span>
+    </a>
+    <a href="/projects/<%= project.id %>/future-state" class="quick-action">
+      <span class="qa-icon">🚀</span>
+      <span>AI Insights</span>
+    </a>
+    <a href="/projects/<%= project.id %>/traceability" class="quick-action">
+      <span class="qa-icon">🔗</span>
+      <span>Traceability</span>
+    </a>
+  </div>
+
+  <!-- Members -->
+  <div class="section">
+    <div class="section-header">
+      <h3>Team Members</h3>
+      <% if (member.role === 'owner') { %>
+        <button class="btn-sm btn-outline" onclick="document.getElementById('invite-form').style.display='block'">+ Invite</button>
+      <% } %>
+    </div>
+    <div id="invite-form" style="display:none;" class="card" style="margin-bottom:12px;">
+      <form method="POST" action="/projects/<%= project.id %>/members/invite" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="email" name="email" class="form-input" placeholder="Email address" style="flex:1;" required>
+        <select name="role" class="form-input" style="width:140px;">
+          <option value="analyst">Analyst</option>
+          <option value="viewer">Viewer</option>
+        </select>
+        <button type="submit" class="btn-primary">Invite</button>
+      </form>
+    </div>
+    <div class="members-list">
+      <% for (const m of members) { %>
+        <div class="member-item">
+          <div class="member-avatar"><%= m.name.charAt(0).toUpperCase() %></div>
+          <div class="member-info">
+            <div class="member-name"><%= m.name %></div>
+            <div class="member-email"><%= m.email %></div>
+          </div>
+          <span class="badge-role"><%= m.role %></span>
+          <% if (member.role === 'owner' && m.role !== 'owner' && m.id !== session.userId) { %>
+            <form method="POST" action="/projects/<%= project.id %>/members/<%= m.id %>/remove" style="display:inline;">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit" class="btn-sm btn-danger" onclick="return confirm('Remove this member?')">Remove</button>
+            </form>
+          <% } %>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>

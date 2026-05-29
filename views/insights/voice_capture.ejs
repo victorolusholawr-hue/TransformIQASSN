@@ -1,0 +1,59 @@
+<div class="container">
+  <%- include('../partials/insights_nav') %>
+  <div class="page-header" style="margin-top:20px;">
+    <h1>🎙 Voice Capture</h1>
+  </div>
+
+  <div class="card">
+    <p>Use your microphone to record a meeting, interview, or notes. The transcript will be saved as a source for AI extraction.</p>
+    <p class="badge-warning" style="margin-top:8px;display:inline-block;">Chrome / Edge only</p>
+
+    <div class="voice-controls" style="margin-top:20px;">
+      <button id="btn-start" class="btn-primary" onclick="startRecording()">🎙 Start Recording</button>
+      <button id="btn-stop" class="btn-danger" onclick="stopRecording()" disabled>⏹ Stop</button>
+    </div>
+
+    <div id="transcript-wrap" style="margin-top:20px; display:none;">
+      <form method="POST" action="/projects/<%= project.id %>/voice-capture/save">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="form-group">
+          <label class="form-label">Transcript</label>
+          <textarea id="transcript" name="transcript" class="form-input form-textarea" rows="10" placeholder="Transcript will appear here..."></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Save as Source</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+let recognition;
+const startBtn = document.getElementById('btn-start');
+const stopBtn  = document.getElementById('btn-stop');
+const tWrap    = document.getElementById('transcript-wrap');
+const tArea    = document.getElementById('transcript');
+
+function startRecording() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('Speech recognition is not supported in this browser. Use Chrome or Edge.'); return; }
+  recognition = new SR();
+  recognition.continuous     = true;
+  recognition.interimResults = true;
+  recognition.lang           = 'en-GB';
+  recognition.onresult = e => {
+    let t = '';
+    for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + ' ';
+    tArea.value = t.trim();
+    tWrap.style.display = 'block';
+  };
+  recognition.start();
+  startBtn.disabled = true;
+  stopBtn.disabled  = false;
+}
+function stopRecording() {
+  if (recognition) recognition.stop();
+  startBtn.disabled = false;
+  stopBtn.disabled  = true;
+}
+</script>

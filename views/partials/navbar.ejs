@@ -1,0 +1,35 @@
+<nav class="navbar">
+  <div class="navbar-brand">
+    <a href="<%= currentUser ? '/dashboard' : '/' %>" class="brand-link">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <span class="brand-name">TransformIQ</span>
+    </a>
+  </div>
+
+  <% if (currentUser) { %>
+  <div class="navbar-links">
+    <a href="/dashboard" class="nav-link">Dashboard</a>
+    <a href="/projects/create" class="nav-link">New Project</a>
+    <% if (currentUser.role === 'admin') { %>
+      <a href="/admin/usage" class="nav-link">Admin</a>
+    <% } %>
+  </div>
+  <div class="navbar-right">
+    <button class="theme-btn btn-icon" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+    <span class="nav-user"><%= currentUser.name %></span>
+    <a href="/logout" class="btn-outline btn-sm">Logout</a>
+  </div>
+  <% } else { %>
+  <div class="navbar-right">
+    <button class="theme-btn btn-icon" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+    <a href="/login"    class="btn-outline btn-sm">Login</a>
+    <a href="/register" class="btn-primary btn-sm">Register</a>
+  </div>
+  <% } %>
+
+  <button class="nav-toggle" onclick="this.parentElement.classList.toggle('open')" aria-label="Menu">☰</button>
+</nav>

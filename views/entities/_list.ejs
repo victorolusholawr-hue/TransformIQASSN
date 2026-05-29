@@ -1,0 +1,56 @@
+<div class="container">
+  <div class="page-header">
+    <h1><%= icon %> <%= label %> <span class="count-badge"><%= entities.length %></span></h1>
+    <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+  </div>
+
+  <!-- Filters -->
+  <form method="GET" class="filter-bar">
+    <% if (showStatusFilter) { %>
+      <select name="status" class="form-input filter-input" onchange="this.form.submit()">
+        <option value="">All Statuses</option>
+        <% for (const s of statusOptions) { %>
+          <option value="<%= s %>" <%= filters.status===s?'selected':'' %>><%= s.charAt(0).toUpperCase()+s.slice(1) %></option>
+        <% } %>
+      </select>
+    <% } %>
+    <input type="number" name="confidence_min" class="form-input filter-input"
+      placeholder="Min confidence" step="0.1" min="0" max="1"
+      value="<%= filters.confidence_min || '' %>" style="width:160px;">
+    <button type="submit" class="btn-outline btn-sm">Filter</button>
+    <a href="/projects/<%= project.id %>/<%= type %>" class="btn-outline btn-sm">Clear</a>
+  </form>
+
+  <% if (!entities.length) { %>
+    <div class="empty-state"><p>No <%= label.toLowerCase() %> extracted yet.</p></div>
+  <% } else { %>
+    <div class="entity-list">
+      <% for (const e of entities) { %>
+        <div class="entity-item entity-item-<%= color %>">
+          <div class="entity-item-body">
+            <div class="entity-item-header">
+              <a href="/projects/<%= project.id %>/<%= type %>/<%= e.id %>" class="entity-title"><%= e.title || e.name %></a>
+              <div class="entity-badges">
+                <% if (e.category)   { %><span class="badge-info"><%= e.category %></span><% } %>
+                <% if (e.status)     { %><span class="badge-<%= e.status==='approved'||e.status==='confirmed'?'success':e.status==='rejected'||e.status==='deferred'?'muted':'info' %>"><%= e.status %></span><% } %>
+                <% if (e.priority)   { %><span class="badge-<%= e.priority==='high'?'danger':e.priority==='medium'?'warning':'muted' %>"><%= e.priority %></span><% } %>
+                <% if (e.likelihood && e.impact) { %><span class="badge-<%= e.likelihood*e.impact>=15?'danger':e.likelihood*e.impact>=9?'warning':'muted' %>">Score: <%= e.likelihood*e.impact %></span><% } %>
+                <% if (e.influence && e.interest) { %><span class="badge-info">Inf:<%= e.influence %> Int:<%= e.interest %></span><% } %>
+                <% if (e.confidence) { %><span class="confidence-badge"><%= Math.round(e.confidence*100) %>%</span><% } %>
+              </div>
+            </div>
+            <% if (e.description) { %><p class="entity-desc"><%= e.description.slice(0,200) %><%= e.description.length>200?'...':'' %></p><% } %>
+          </div>
+          <% if (member.role !== 'viewer') { %>
+          <div class="entity-actions">
+            <form method="POST" action="/projects/<%= project.id %>/<%= type %>/<%= e.id %>/delete" style="display:inline;">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit" class="btn-sm btn-danger" onclick="return confirm('Delete?')">🗑</button>
+            </form>
+          </div>
+          <% } %>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+</div>

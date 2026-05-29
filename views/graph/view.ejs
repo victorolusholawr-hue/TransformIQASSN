@@ -1,0 +1,86 @@
+<div class="container">
+  <div class="page-header">
+    <h1>Knowledge Graph</h1>
+    <div class="header-actions">
+      <a href="/projects/<%= project.id %>/traceability" class="btn-outline">Traceability Matrix</a>
+      <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+    </div>
+  </div>
+
+  <div class="graph-legend">
+    <% const nodeTypes = [
+      {type:'requirements',color:'#6366f1',label:'Requirements'},
+      {type:'stakeholders',color:'#06b6d4',label:'Stakeholders'},
+      {type:'processes',   color:'#22c55e',label:'Processes'},
+      {type:'decisions',   color:'#f59e0b',label:'Decisions'},
+      {type:'risks',       color:'#ef4444',label:'Risks'},
+      {type:'business_rules',color:'#8b5cf6',label:'Business Rules'},
+      {type:'systems',     color:'#3b82f6',label:'Systems'},
+      {type:'kpis',        color:'#ec4899',label:'KPIs'},
+    ]; %>
+    <% for (const n of nodeTypes) { %>
+      <span class="legend-item">
+        <span class="legend-dot" style="background:<%= n.color %>"></span>
+        <%= n.label %>
+      </span>
+    <% } %>
+  </div>
+
+  <div id="cy" class="graph-canvas"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<script>
+const PROJECT_ID = '<%= project.id %>';
+
+fetch(`/projects/${PROJECT_ID}/graph/data`)
+  .then(r => r.json())
+  .then(({ elements }) => {
+    if (!elements.length) {
+      document.getElementById('cy').innerHTML = '<p style="text-align:center;padding:60px;color:var(--muted)">No entities yet. Upload sources and extract entities to build the graph.</p>';
+      return;
+    }
+    const cy = cytoscape({
+      container: document.getElementById('cy'),
+      elements,
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'background-color': 'data(color)',
+            'label': 'data(label)',
+            'color': '#fff',
+            'font-size': '10px',
+            'text-wrap': 'wrap',
+            'text-max-width': '80px',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'width': '60px',
+            'height': '60px',
+            'border-width': 2,
+            'border-color': '#fff',
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'width': 1.5,
+            'line-color': 'var(--border2)',
+            'target-arrow-color': 'var(--border2)',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier',
+            'label': 'data(label)',
+            'font-size': '9px',
+            'color': 'var(--muted)',
+          }
+        },
+        { selector: 'node:selected', style: { 'border-color': 'var(--primary)', 'border-width': 3 } },
+      ],
+      layout: { name: 'cose', idealEdgeLength: 120, nodeOverlap: 20, refresh: 20, fit: true, padding: 30, randomize: true, componentSpacing: 100, nodeRepulsion: 450000, edgeElasticity: 100, nestingFactor: 5, gravity: 80, numIter: 1000 },
+    });
+    cy.on('tap', 'node', e => {
+      const data = e.target.data();
+      alert(`${data.type}: ${data.label}`);
+    });
+  });
+</script>

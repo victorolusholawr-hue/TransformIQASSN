@@ -1,0 +1,9 @@
+<% if (flash.success && flash.success.length) { %>
+  <div class="flash flash-success"><%= flash.success[0] %></div>
+<% } %>
+<% if (flash.error && flash.error.length) { %>
+  <div class="flash flash-error"><%= flash.error[0] %></div>
+<% } %>
+<% if (flash.warning && flash.warning.length) { %>
+  <div class="flash flash-warning"><%= flash.warning[0] %></div>
+<% } %>

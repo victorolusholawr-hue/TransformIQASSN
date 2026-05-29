@@ -1,0 +1,54 @@
+<div class="container">
+  <div class="page-header">
+    <h1>RACI Matrix</h1>
+    <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+  </div>
+
+  <% if (!processes.length || !stakeholders.length) { %>
+    <div class="empty-state"><p>Need both Processes and Stakeholders to build a RACI matrix.</p></div>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="raci-table">
+        <thead>
+          <tr>
+            <th>Process</th>
+            <% for (const s of stakeholders) { %><th><%= s.name %></th><% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const p of processes) { %>
+            <tr>
+              <td><strong><%= p.name %></strong></td>
+              <% for (const s of stakeholders) { %>
+                <td class="raci-cell">
+                  <select class="raci-select" data-process="<%= p.id %>" data-stakeholder="<%= s.id %>"
+                    onchange="updateRaci(this)">
+                    <option value="">—</option>
+                    <% for (const v of ['R','A','C','I']) { %>
+                      <option value="<%= v %>" <%= (raci[p.id]&&raci[p.id][s.id]===v)?'selected':'' %>><%= v %></option>
+                    <% } %>
+                  </select>
+                </td>
+              <% } %>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+    <p class="form-hint" style="margin-top:10px;">R=Responsible, A=Accountable, C=Consulted, I=Informed</p>
+  <% } %>
+</div>
+<script>
+async function updateRaci(sel) {
+  await fetch('/projects/<%= project.id %>/visualize/raci/update-cell', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      _csrf:          '<%= csrfToken %>',
+      process_id:     sel.dataset.process,
+      stakeholder_id: sel.dataset.stakeholder,
+      value:          sel.value,
+    }),
+  });
+}
+</script>

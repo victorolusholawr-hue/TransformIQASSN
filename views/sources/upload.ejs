@@ -1,0 +1,79 @@
+<div class="container">
+  <div class="page-header">
+    <h1>Upload Source</h1>
+    <a href="/projects/<%= project.id %>" class="btn-outline">← Back to Project</a>
+  </div>
+
+  <% if (last) { %>
+    <div class="notice notice-success">
+      <strong>✓ Uploaded:</strong> <%= last.name %>
+      <span class="extraction-status">
+        <% if (last.ai_status === 'done') { %>
+          · AI extraction complete
+        <% } else if (last.extraction_status === 'done') { %>
+          · Text extracted. <a href="/sources/<%= last.id %>/extract" onclick="return confirm('Extract entities with AI?')">Extract with AI →</a>
+        <% } else { %>
+          · <a href="/sources/<%= last.id %>">View source</a>
+        <% } %>
+      </span>
+    </div>
+  <% } %>
+
+  <div class="card">
+    <form method="POST" action="/projects/<%= project.id %>/sources/upload" enctype="multipart/form-data" id="upload-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+      <div class="form-group">
+        <label class="form-label">Source Type</label>
+        <select name="source_type" class="form-input">
+          <option value="">Select type...</option>
+          <option value="requirements">Requirements Document</option>
+          <option value="process">Process Document</option>
+          <option value="stakeholder">Stakeholder Register</option>
+          <option value="meeting_notes">Meeting Notes</option>
+          <option value="report">Report</option>
+          <option value="policy">Policy / Procedure</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">File *</label>
+        <div class="drop-zone" id="drop-zone">
+          <div class="drop-zone-icon">📁</div>
+          <p class="drop-zone-text">Drag & drop or <label for="file-input" class="drop-zone-link">browse</label></p>
+          <p class="drop-zone-hint">PDF, DOCX, XLSX, PPTX, TXT, PNG, JPG — max 100 MB</p>
+          <input type="file" id="file-input" name="file" accept=".pdf,.docx,.xlsx,.xls,.txt,.pptx,.png,.jpg,.jpeg,.webp,.gif" required style="display:none;">
+          <div id="file-name" class="drop-zone-selected" style="display:none;"></div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary" id="upload-btn">Upload Source</button>
+      </div>
+    </form>
+  </div>
+
+  <a href="/projects/<%= project.id %>/sources" class="alt-link">View all sources →</a>
+</div>
+
+<script>
+const dz  = document.getElementById('drop-zone');
+const fi  = document.getElementById('file-input');
+const fn  = document.getElementById('file-name');
+
+fi.addEventListener('change', () => {
+  if(fi.files[0]){ fn.textContent = fi.files[0].name; fn.style.display='block'; }
+});
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  fi.files = e.dataTransfer.files;
+  if(fi.files[0]){ fn.textContent = fi.files[0].name; fn.style.display='block'; }
+});
+document.getElementById('upload-form').addEventListener('submit', () => {
+  document.getElementById('upload-btn').textContent = 'Uploading...';
+  document.getElementById('upload-btn').disabled = true;
+});
+</script>

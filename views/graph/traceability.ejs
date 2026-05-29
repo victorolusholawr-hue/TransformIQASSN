@@ -1,0 +1,35 @@
+<div class="container">
+  <div class="page-header">
+    <h1>Traceability Matrix</h1>
+    <a href="/projects/<%= project.id %>/graph" class="btn-outline">← Knowledge Graph</a>
+  </div>
+
+  <% if (!requirements.length || !systems.length) { %>
+    <div class="empty-state"><p>Need at least one Requirement and one System to show the traceability matrix.</p></div>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="traceability-table">
+        <thead>
+          <tr>
+            <th>Requirement</th>
+            <% for (const s of systems) { %>
+              <th class="rotate-header"><span><%= s.name %></span></th>
+            <% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const r of requirements) { %>
+            <tr>
+              <td class="req-cell"><%= r.title %></td>
+              <% for (const s of systems) { %>
+                <td class="matrix-cell <% if(edgeSet.has(r.id+':'+s.id)||edgeSet.has(s.id+':'+r.id)){%>matrix-linked<%}%>">
+                  <% if(edgeSet.has(r.id+':'+s.id)||edgeSet.has(s.id+':'+r.id)){%>✓<%}else{%>·<%}%>
+                </td>
+              <% } %>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>

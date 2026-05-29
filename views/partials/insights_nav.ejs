@@ -1,0 +1,8 @@
+<nav class="insights-nav">
+  <a href="/projects/<%= project.id %>/future-state"        class="insights-tab <%= title === 'Future State'       ? 'active' : '' %>">Future State</a>
+  <a href="/projects/<%= project.id %>/roadmap"              class="insights-tab <%= title === 'Delivery Roadmap'   ? 'active' : '' %>">Roadmap</a>
+  <a href="/projects/<%= project.id %>/user-stories"         class="insights-tab <%= title === 'User Stories'       ? 'active' : '' %>">User Stories</a>
+  <a href="/projects/<%= project.id %>/acceptance-criteria"  class="insights-tab <%= title === 'Acceptance Criteria'? 'active' : '' %>">Acceptance Criteria</a>
+  <a href="/projects/<%= project.id %>/impact-matrix"        class="insights-tab <%= title === 'Impact Matrix'      ? 'active' : '' %>">Impact Matrix</a>
+  <a href="/projects/<%= project.id %>/voice-capture"        class="insights-tab <%= title === 'Voice Capture'      ? 'active' : '' %>">🎙 Voice</a>
+</nav>

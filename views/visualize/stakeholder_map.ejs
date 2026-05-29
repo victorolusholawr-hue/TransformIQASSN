@@ -1,0 +1,51 @@
+<div class="container">
+  <div class="page-header">
+    <h1>Stakeholder Map</h1>
+    <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+  </div>
+  <% if (!stakeholders.length) { %>
+    <div class="empty-state"><p>No stakeholders extracted yet.</p></div>
+  <% } else { %>
+    <div class="card" style="padding:24px;">
+      <canvas id="stakeholder-chart" width="600" height="480"></canvas>
+    </div>
+    <div class="stakeholder-legend">
+      <% for (const s of stakeholders) { %>
+        <div class="legend-item-row">
+          <span class="legend-dot" style="background:var(--primary)"></span>
+          <strong><%= s.name %></strong>
+          <span class="muted"><%= s.role || '' %></span>
+          <span class="badge-info">Inf:<%= s.influence||'?' %> Int:<%= s.interest||'?' %></span>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+const stakeholders = <%- JSON.stringify(stakeholders.map(s=>({x:s.interest||0,y:s.influence||0,label:s.name}))) %>;
+new Chart(document.getElementById('stakeholder-chart'), {
+  type: 'scatter',
+  data: {
+    datasets: [{
+      label: 'Stakeholders',
+      data: stakeholders,
+      backgroundColor: 'rgba(114,36,108,0.7)',
+      pointRadius: 10,
+    }]
+  },
+  options: {
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: ctx => stakeholders[ctx.dataIndex].label + ` (Int:${ctx.parsed.x}, Inf:${ctx.parsed.y})`
+        }
+      }
+    },
+    scales: {
+      x: { title: { display:true, text:'Interest (1–5)' }, min:0, max:6 },
+      y: { title: { display:true, text:'Influence (1–5)' }, min:0, max:6 },
+    }
+  }
+});
+</script>

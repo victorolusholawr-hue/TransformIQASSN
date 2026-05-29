@@ -1,0 +1,3 @@
+<% const type='kpis', label='KPIs', icon='📊', color='pink', showStatusFilter=false; %>
+<% const statusOptions='[]'.replace('[','').replace(']','').split(',').filter(Boolean); %>
+<%- include('_list', { type, label, icon, color, entities, project, member, filters, showStatusFilter, statusOptions, csrfToken }) %>

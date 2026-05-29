@@ -1,0 +1,49 @@
+<div class="container">
+  <div class="page-header">
+    <h1>Sources</h1>
+    <div class="header-actions">
+      <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary">+ Upload</a>
+      <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+    </div>
+  </div>
+
+  <% if (!sources.length) { %>
+    <div class="empty-state">
+      <p>No sources yet. Upload a document to start extracting entities.</p>
+      <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary" style="margin-top:16px;">Upload First Source</a>
+    </div>
+  <% } else { %>
+    <div class="sources-list">
+      <% for (const s of sources) { %>
+        <div class="source-item">
+          <div class="source-item-icon">
+            <% const iconMap = {pdf:'📄',docx:'📝',xlsx:'📊',pptx:'📑',txt:'📃',png:'🖼️',jpg:'🖼️',jpeg:'🖼️',voice:'🎙️'}; %>
+            <%= iconMap[(s.file_ext||'').replace('.','').toLowerCase()] || '📁' %>
+          </div>
+          <div class="source-item-info">
+            <a href="/sources/<%= s.id %>" class="source-item-name"><%= s.name %></a>
+            <div class="source-item-meta">
+              <% if (s.source_type) { %><span class="badge-info"><%= s.source_type %></span><% } %>
+              <span class="<%= s.ai_status === 'done' ? 'badge-success' : s.ai_status === 'processing' ? 'badge-warning' : 'badge-muted' %>">
+                <%= s.ai_status === 'done' ? '✓ Extracted' : s.ai_status === 'processing' ? '⟳ Processing' : 'Pending' %>
+              </span>
+              <span class="source-date"><%= new Date(s.created_at).toLocaleDateString() %></span>
+            </div>
+          </div>
+          <div class="source-item-actions">
+            <% if (s.ai_status !== 'done' && s.extraction_status === 'done') { %>
+              <form method="POST" action="/sources/<%= s.id %>/extract" style="display:inline;">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button type="submit" class="btn-sm btn-primary">Extract AI</button>
+              </form>
+            <% } %>
+            <form method="POST" action="/sources/<%= s.id %>/delete" style="display:inline;">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit" class="btn-sm btn-danger" onclick="return confirm('Delete this source?')">Delete</button>
+            </form>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+</div>

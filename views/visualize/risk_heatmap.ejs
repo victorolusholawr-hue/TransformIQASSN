@@ -1,0 +1,36 @@
+<div class="container">
+  <div class="page-header">
+    <h1>Risk Heatmap</h1>
+    <a href="/projects/<%= project.id %>/risks" class="btn-outline">View all risks</a>
+    <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+  </div>
+
+  <div class="heatmap-wrap">
+    <div class="heatmap-grid">
+      <!-- Y-axis label -->
+      <div class="heatmap-yaxis">Impact →</div>
+      <!-- Grid: 5 rows (impact 5→1) x 5 cols (likelihood 1→5) -->
+      <% for (let imp = 5; imp >= 1; imp--) { %>
+        <% for (let lik = 1; lik <= 5; lik++) { %>
+          <% const score = imp * lik; %>
+          <% const color = score >= 15 ? 'heatmap-red' : score >= 9 ? 'heatmap-amber' : score >= 5 ? 'heatmap-yellow' : 'heatmap-green'; %>
+          <div class="heatmap-cell <%= color %>" title="Likelihood:<%= lik %>, Impact:<%= imp %>, Score:<%= score %>">
+            <span class="heatmap-score"><%= score %></span>
+            <% const cellRisks = risks.filter(r => r.likelihood == lik && r.impact == imp); %>
+            <% for (const r of cellRisks) { %>
+              <span class="heatmap-risk-dot" title="<%= r.title %>">●</span>
+            <% } %>
+          </div>
+        <% } %>
+      <% } %>
+    </div>
+    <div class="heatmap-xaxis">Likelihood →</div>
+  </div>
+
+  <div class="heatmap-legend" style="margin-top:16px;">
+    <span class="legend-item"><span class="heatmap-dot heatmap-red"></span>Critical (≥15)</span>
+    <span class="legend-item"><span class="heatmap-dot heatmap-amber"></span>High (9–14)</span>
+    <span class="legend-item"><span class="heatmap-dot heatmap-yellow"></span>Medium (5–8)</span>
+    <span class="legend-item"><span class="heatmap-dot heatmap-green"></span>Low (1–4)</span>
+  </div>
+</div>

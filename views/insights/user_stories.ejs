@@ -1,0 +1,32 @@
+<div class="container">
+  <%- include('../partials/insights_nav') %>
+  <div class="page-header" style="margin-top:20px;">
+    <h1>User Stories</h1>
+    <% if (member.role !== 'viewer') { %>
+      <form method="POST" action="/projects/<%= project.id %>/user-stories">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %></button>
+      </form>
+    <% } %>
+  </div>
+  <% if (!insight) { %>
+    <div class="empty-state"><p>Generate user stories with AI.</p></div>
+  <% } else { const c = insight.content; %>
+    <% if (c.personas) { %>
+      <% for (const p of c.personas) { %>
+        <div class="section">
+          <div class="section-header"><h3><%= p.name %> — <em><%= p.role %></em></h3></div>
+          <% for (const s of (p.stories || [])) { %>
+            <div class="story-card">
+              <p><strong>As a</strong> <%= s.as_a %>, <strong>I want</strong> <%= s.i_want %>, <strong>so that</strong> <%= s.so_that %></p>
+              <% if (s.acceptance_criteria && s.acceptance_criteria.length) { %>
+                <ul class="ac-list"><% for (const ac of s.acceptance_criteria) { %><li><%= ac %></li><% } %></ul>
+              <% } %>
+              <% if (s.priority) { %><span class="badge-<%= s.priority==='high'?'danger':s.priority==='medium'?'warning':'muted' %>"><%= s.priority %></span><% } %>
+            </div>
+          <% } %>
+        </div>
+      <% } %>
+    <% } %>
+  <% } %>
+</div>

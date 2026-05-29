@@ -1,0 +1,37 @@
+<div class="container">
+  <%- include('../partials/insights_nav') %>
+  <div class="page-header" style="margin-top:20px;">
+    <h1>Impact Matrix</h1>
+    <% if (member.role !== 'viewer') { %>
+      <form method="POST" action="/projects/<%= project.id %>/impact-matrix">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %></button>
+      </form>
+    <% } %>
+  </div>
+  <% if (!insight) { %>
+    <div class="empty-state"><p>Generate a change impact matrix with AI.</p></div>
+  <% } else { const c = insight.content; %>
+    <% if (c.impacts && c.impacts.length) { %>
+      <div class="impact-list">
+        <% for (const i of c.impacts) { %>
+          <div class="impact-item card" style="margin-bottom:12px;">
+            <div class="impact-header">
+              <strong><%= i.change %></strong>
+              <span class="badge-<%= i.impact_level==='high'?'danger':i.impact_level==='medium'?'warning':'muted' %>"><%= i.impact_level %></span>
+            </div>
+            <p style="margin-top:6px;"><%= i.description %></p>
+            <div class="impact-meta">
+              <% if (i.affected_departments && i.affected_departments.length) { %>
+                <span class="muted">Departments: <%= i.affected_departments.join(', ') %></span>
+              <% } %>
+              <% if (i.affected_systems && i.affected_systems.length) { %>
+                <span class="muted">Systems: <%= i.affected_systems.join(', ') %></span>
+              <% } %>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+  <% } %>
+</div>

@@ -1,0 +1,50 @@
+<div class="container">
+  <!-- Pipeline Hero -->
+  <div class="pipeline-hero">
+    <h1 class="pipeline-title">AI-Powered Transformation</h1>
+    <p class="pipeline-sub">Upload documents · Extract entities · Build knowledge graph · Generate insights · Export deliverables</p>
+    <div class="pipeline-steps">
+      <div class="pipeline-step"><div class="step-num">1</div><div class="step-label">Capture</div></div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step"><div class="step-num">2</div><div class="step-label">Extract</div></div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step"><div class="step-num">3</div><div class="step-label">Graph</div></div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step"><div class="step-num">4</div><div class="step-label">Visualise</div></div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step"><div class="step-num">5</div><div class="step-label">Insights</div></div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step"><div class="step-num">6</div><div class="step-label">Export</div></div>
+    </div>
+  </div>
+
+  <!-- Projects -->
+  <div class="page-header">
+    <h2>My Projects</h2>
+    <a href="/projects/create" class="btn-primary">+ New Project</a>
+  </div>
+
+  <% if (!projects.length) { %>
+    <div class="empty-state">
+      <p>No projects yet. Create your first project to get started.</p>
+      <a href="/projects/create" class="btn-primary" style="margin-top:16px;">Create Project</a>
+    </div>
+  <% } else { %>
+    <div class="projects-grid">
+      <% for (const p of projects) { %>
+        <a href="/projects/<%= p.id %>" class="project-card <%= p.status === 'archived' ? 'project-card-archived' : '' %>">
+          <div class="project-card-header">
+            <h3 class="project-card-name"><%= p.name %></h3>
+            <% if (p.status === 'archived') { %><span class="badge-muted">Archived</span><% } %>
+          </div>
+          <p class="project-card-desc"><%= p.description || 'No description' %></p>
+          <div class="project-card-meta">
+            <span><%= p.source_count %> sources</span>
+            <span><%= p.req_count %> requirements</span>
+            <span class="badge-role"><%= p.member_role %></span>
+          </div>
+        </a>
+      <% } %>
+    </div>
+  <% } %>
+</div>
