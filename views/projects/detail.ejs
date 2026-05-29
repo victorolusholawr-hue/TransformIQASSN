@@ -1,109 +1,255 @@
-<div class="container">
-  <div class="page-header">
-    <div>
-      <h1><%= project.name %></h1>
-      <% if (project.description) { %><p class="page-sub"><%= project.description %></p><% } %>
-    </div>
-    <div class="header-actions">
-      <% if (member.role !== 'viewer') { %>
-        <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary">+ Upload Source</a>
-        <a href="/projects/<%= project.id %>/edit" class="btn-outline">Edit</a>
+<div class="project-layout">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+  <aside class="project-sidebar">
+    <div class="project-sidebar-title"><%= project.name %></div>
+    <div class="project-sidebar-meta">
+      <% if (project.status === 'archived') { %>
+        <span class="badge-muted">Archived</span>
+      <% } else { %>
+        <span class="badge-success">Active</span>
       <% } %>
-      <a href="/projects/<%= project.id %>/export" class="btn-outline">Export</a>
-      <% if (member.role === 'owner') { %>
-        <form method="POST" action="/projects/<%= project.id %>/delete" style="display:inline;">
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="btn-danger" onclick="return confirm('Delete this project and all its data? This cannot be undone.')">Delete</button>
-        </form>
+      <% if (project.tags && project.tags.length) { %>
+        <% for (const tag of project.tags.slice(0,2)) { %>
+          <span class="badge-muted"><%= tag %></span>
+        <% } %>
       <% } %>
     </div>
-  </div>
 
-  <!-- Entity count cards -->
-  <div class="entity-grid">
-    <% const entityTypes = [
-      { key:'requirements',   label:'Requirements',   icon:'📋', color:'indigo' },
-      { key:'stakeholders',   label:'Stakeholders',   icon:'👥', color:'cyan'   },
-      { key:'processes',      label:'Processes',      icon:'⚙️',  color:'green'  },
-      { key:'decisions',      label:'Decisions',      icon:'✅', color:'amber'  },
-      { key:'risks',          label:'Risks',          icon:'⚠️', color:'red'    },
-      { key:'business_rules', label:'Business Rules', icon:'📏', color:'violet' },
-      { key:'systems',        label:'Systems',        icon:'🖥️', color:'blue'   },
-      { key:'kpis',           label:'KPIs',           icon:'📊', color:'pink'   },
-    ]; %>
-    <% for (const et of entityTypes) { %>
-      <a href="/projects/<%= project.id %>/<%= et.key %>" class="entity-card entity-card-<%= et.color %>">
-        <div class="entity-card-icon"><%= et.icon %></div>
-        <div class="entity-card-count"><%= counts[et.key] %></div>
-        <div class="entity-card-label"><%= et.label %></div>
-      </a>
-    <% } %>
-  </div>
-
-  <!-- Quick actions -->
-  <div class="quick-actions">
-    <a href="/projects/<%= project.id %>/sources" class="quick-action">
-      <span class="qa-icon">📁</span>
-      <span>Sources (<%= counts.sources %>)</span>
+    <!-- Sources -->
+    <div class="sidebar-section-label">Sources</div>
+    <a href="/projects/<%= project.id %>/sources" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(114,36,108,0.12);color:var(--primary);">📁</span>
+      <span>All Sources</span>
+      <span class="sidebar-badge"><%= counts.sources %></span>
     </a>
-    <a href="/projects/<%= project.id %>/graph" class="quick-action">
-      <span class="qa-icon">🕸️</span>
+    <% if (member.role !== 'viewer') { %>
+    <a href="/projects/<%= project.id %>/sources/upload" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(114,36,108,0.12);color:var(--primary);">⬆</span>
+      <span>Upload Source</span>
+    </a>
+    <% } %>
+
+    <div class="sidebar-divider"></div>
+
+    <!-- Entities -->
+    <div class="sidebar-section-label">Entities</div>
+    <a href="/projects/<%= project.id %>/requirements" class="sidebar-link">
+      <span class="sidebar-link-icon ec-requirements">📋</span>
+      <span>Requirements</span>
+      <span class="sidebar-badge"><%= counts.requirements %></span>
+    </a>
+    <a href="/projects/<%= project.id %>/stakeholders" class="sidebar-link">
+      <span class="sidebar-link-icon ec-stakeholders">👥</span>
+      <span>Stakeholders</span>
+      <span class="sidebar-badge"><%= counts.stakeholders %></span>
+    </a>
+    <a href="/projects/<%= project.id %>/processes" class="sidebar-link">
+      <span class="sidebar-link-icon ec-processes">⚙️</span>
+      <span>Processes</span>
+      <span class="sidebar-badge"><%= counts.processes %></span>
+    </a>
+    <a href="/projects/<%= project.id %>/decisions" class="sidebar-link">
+      <span class="sidebar-link-icon ec-decisions">✅</span>
+      <span>Decisions</span>
+      <span class="sidebar-badge"><%= counts.decisions %></span>
+    </a>
+    <a href="/projects/<%= project.id %>/risks" class="sidebar-link">
+      <span class="sidebar-link-icon ec-risks">⚠️</span>
+      <span>Risks</span>
+      <span class="sidebar-badge"><%= counts.risks %></span>
+    </a>
+    <a href="/projects/<%= project.id %>/business_rules" class="sidebar-link">
+      <span class="sidebar-link-icon ec-business-rules">📏</span>
+      <span>Business Rules</span>
+      <span class="sidebar-badge"><%= counts.business_rules %></span>
+    </a>
+    <a href="/projects/<%= project.id %>/systems" class="sidebar-link">
+      <span class="sidebar-link-icon ec-systems">🖥️</span>
+      <span>Systems</span>
+      <span class="sidebar-badge"><%= counts.systems %></span>
+    </a>
+    <a href="/projects/<%= project.id %>/kpis" class="sidebar-link">
+      <span class="sidebar-link-icon ec-kpis">📊</span>
+      <span>KPIs</span>
+      <span class="sidebar-badge"><%= counts.kpis %></span>
+    </a>
+
+    <div class="sidebar-divider"></div>
+
+    <!-- Analysis -->
+    <div class="sidebar-section-label">Analysis</div>
+    <a href="/projects/<%= project.id %>/graph" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(65,182,230,0.15);color:#41b6e6;">🕸️</span>
       <span>Knowledge Graph</span>
     </a>
-    <a href="/projects/<%= project.id %>/visualize/process-map" class="quick-action">
-      <span class="qa-icon">🗺️</span>
-      <span>Process Map</span>
+    <a href="/projects/<%= project.id %>/traceability" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(65,182,230,0.15);color:#41b6e6;">🔗</span>
+      <span>Traceability Matrix</span>
     </a>
-    <a href="/projects/<%= project.id %>/visualize/gap-analysis" class="quick-action">
-      <span class="qa-icon">🔍</span>
+
+    <div class="sidebar-divider"></div>
+
+    <!-- Visualize -->
+    <div class="sidebar-section-label">Visualize</div>
+    <a href="/projects/<%= project.id %>/visualize/process-map" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(13,148,136,0.12);color:#0D9488;">🗺️</span>
+      <span>Process Maps</span>
+    </a>
+    <a href="/projects/<%= project.id %>/visualize/raci" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(13,148,136,0.12);color:#0D9488;">📐</span>
+      <span>RACI Matrix</span>
+    </a>
+    <a href="/projects/<%= project.id %>/visualize/stakeholder-map" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(13,148,136,0.12);color:#0D9488;">🎯</span>
+      <span>Stakeholder Map</span>
+    </a>
+    <a href="/projects/<%= project.id %>/visualize/gap-analysis" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(13,148,136,0.12);color:#0D9488;">🔍</span>
       <span>Gap Analysis</span>
     </a>
-    <a href="/projects/<%= project.id %>/future-state" class="quick-action">
-      <span class="qa-icon">🚀</span>
-      <span>AI Insights</span>
+    <a href="/projects/<%= project.id %>/visualize/risk-heatmap" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(220,107,47,0.15);color:#dc6b2f;">🌡️</span>
+      <span>Risk Heatmap</span>
     </a>
-    <a href="/projects/<%= project.id %>/traceability" class="quick-action">
-      <span class="qa-icon">🔗</span>
-      <span>Traceability</span>
-    </a>
-  </div>
 
-  <!-- Members -->
-  <div class="section">
-    <div class="section-header">
-      <h3>Team Members</h3>
-      <% if (member.role === 'owner') { %>
-        <button class="btn-sm btn-outline" onclick="document.getElementById('invite-form').style.display='block'">+ Invite</button>
+    <div class="sidebar-divider"></div>
+
+    <!-- AI Insights -->
+    <div class="sidebar-section-label">AI Insights</div>
+    <a href="/projects/<%= project.id %>/future-state" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(194,24,139,0.12);color:#c2188b;">🚀</span>
+      <span>Future State</span>
+    </a>
+    <a href="/projects/<%= project.id %>/roadmap" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(194,24,139,0.12);color:#c2188b;">🗓️</span>
+      <span>Roadmap</span>
+    </a>
+    <a href="/projects/<%= project.id %>/user-stories" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(194,24,139,0.12);color:#c2188b;">📖</span>
+      <span>User Stories</span>
+    </a>
+    <a href="/projects/<%= project.id %>/acceptance-criteria" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(194,24,139,0.12);color:#c2188b;">✔️</span>
+      <span>Acceptance Criteria</span>
+    </a>
+    <a href="/projects/<%= project.id %>/impact-matrix" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(194,24,139,0.12);color:#c2188b;">⚡</span>
+      <span>Impact Matrix</span>
+    </a>
+    <a href="/projects/<%= project.id %>/voice-capture" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(194,24,139,0.12);color:#c2188b;">🎙️</span>
+      <span>Voice Capture</span>
+    </a>
+
+    <div class="sidebar-divider"></div>
+
+    <!-- Export -->
+    <div class="sidebar-section-label">Export</div>
+    <a href="/projects/<%= project.id %>/export" class="sidebar-link">
+      <span class="sidebar-link-icon" style="background:rgba(72,162,63,0.12);color:#48a23f;">📤</span>
+      <span>Export Documents</span>
+    </a>
+  </aside>
+
+  <!-- ── Main Content ──────────────────────────────────────────────── -->
+  <main class="project-main">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <h1><%= project.name %></h1>
+        <% if (project.description) { %><p class="page-sub"><%= project.description %></p><% } %>
+      </div>
+      <div class="header-actions">
+        <% if (member.role !== 'viewer') { %>
+          <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary btn-sm">+ Upload Source</a>
+          <a href="/projects/<%= project.id %>/edit" class="btn-outline btn-sm">Edit Project</a>
+        <% } %>
+        <a href="/projects/<%= project.id %>/export" class="btn-outline btn-sm">Export</a>
+        <% if (member.role === 'owner') { %>
+          <form method="POST" action="/projects/<%= project.id %>/delete" style="display:inline;">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="btn-danger btn-sm"
+              onclick="return confirm('Delete this project and all its data? This cannot be undone.')">Delete</button>
+          </form>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Entity count overview -->
+    <div class="entity-grid">
+      <% const entityTypes = [
+        { key:'requirements',   label:'Requirements',   icon:'📋', iconClass:'ec-requirements'  },
+        { key:'stakeholders',   label:'Stakeholders',   icon:'👥', iconClass:'ec-stakeholders'  },
+        { key:'processes',      label:'Processes',      icon:'⚙️',  iconClass:'ec-processes'     },
+        { key:'decisions',      label:'Decisions',      icon:'✅', iconClass:'ec-decisions'     },
+        { key:'risks',          label:'Risks',          icon:'⚠️', iconClass:'ec-risks'         },
+        { key:'business_rules', label:'Business Rules', icon:'📏', iconClass:'ec-business-rules'},
+        { key:'systems',        label:'Systems',        icon:'🖥️', iconClass:'ec-systems'       },
+        { key:'kpis',           label:'KPIs',           icon:'📊', iconClass:'ec-kpis'          },
+      ]; %>
+      <% for (const et of entityTypes) { %>
+        <a href="/projects/<%= project.id %>/<%= et.key %>" class="entity-card">
+          <div class="entity-card-icon <%= et.iconClass %>"><%= et.icon %></div>
+          <div class="entity-card-count"><%= counts[et.key] %></div>
+          <div class="entity-card-label"><%= et.label %></div>
+        </a>
       <% } %>
     </div>
-    <div id="invite-form" style="display:none;" class="card" style="margin-bottom:12px;">
-      <form method="POST" action="/projects/<%= project.id %>/members/invite" style="display:flex;gap:8px;flex-wrap:wrap;">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <input type="email" name="email" class="form-input" placeholder="Email address" style="flex:1;" required>
-        <select name="role" class="form-input" style="width:140px;">
-          <option value="analyst">Analyst</option>
-          <option value="viewer">Viewer</option>
-        </select>
-        <button type="submit" class="btn-primary">Invite</button>
-      </form>
-    </div>
-    <div class="members-list">
-      <% for (const m of members) { %>
-        <div class="member-item">
-          <div class="member-avatar"><%= m.name.charAt(0).toUpperCase() %></div>
-          <div class="member-info">
-            <div class="member-name"><%= m.name %></div>
-            <div class="member-email"><%= m.email %></div>
+
+    <!-- Team Members -->
+    <div class="section">
+      <div class="section-header">
+        <h3>Team Members</h3>
+        <% if (member.role === 'owner') { %>
+          <button class="btn-sm btn-outline"
+            onclick="document.getElementById('invite-form').style.display='block';this.style.display='none'">
+            + Invite Member
+          </button>
+        <% } %>
+      </div>
+
+      <div id="invite-form" style="display:none;padding:16px;border-bottom:1px solid var(--border);">
+        <form method="POST" action="/projects/<%= project.id %>/members/invite"
+              style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div style="flex:1;min-width:180px;">
+            <label class="form-label">Email address</label>
+            <input type="email" name="email" class="form-input" placeholder="colleague@example.com" required>
           </div>
-          <span class="badge-role"><%= m.role %></span>
-          <% if (member.role === 'owner' && m.role !== 'owner' && m.id !== session.userId) { %>
-            <form method="POST" action="/projects/<%= project.id %>/members/<%= m.id %>/remove" style="display:inline;">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button type="submit" class="btn-sm btn-danger" onclick="return confirm('Remove this member?')">Remove</button>
-            </form>
-          <% } %>
-        </div>
-      <% } %>
+          <div style="width:140px;">
+            <label class="form-label">Role</label>
+            <select name="role" class="form-input">
+              <option value="analyst">Analyst</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-primary">Invite</button>
+        </form>
+      </div>
+
+      <div class="members-list">
+        <% for (const m of members) { %>
+          <div class="member-item">
+            <div class="member-avatar"><%= m.name.charAt(0).toUpperCase() %></div>
+            <div class="member-info">
+              <div class="member-name"><%= m.name %></div>
+              <div class="member-email"><%= m.email %></div>
+            </div>
+            <span class="badge-role"><%= m.role %></span>
+            <% if (member.role === 'owner' && m.role !== 'owner') { %>
+              <form method="POST" action="/projects/<%= project.id %>/members/<%= m.id %>/remove"
+                    style="display:inline;">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button type="submit" class="btn-sm btn-danger"
+                  onclick="return confirm('Remove this member?')">Remove</button>
+              </form>
+            <% } %>
+          </div>
+        <% } %>
+      </div>
     </div>
-  </div>
+
+  </main>
 </div>
