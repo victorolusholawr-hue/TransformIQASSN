@@ -1,36 +1,92 @@
-<div class="container">
+<div class="container-wide">
   <div class="page-header">
-    <h1>Risk Heatmap</h1>
-    <a href="/projects/<%= project.id %>/risks" class="btn-outline">View all risks</a>
-    <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
-  </div>
-
-  <div class="heatmap-wrap">
-    <div class="heatmap-grid">
-      <!-- Y-axis label -->
-      <div class="heatmap-yaxis">Impact →</div>
-      <!-- Grid: 5 rows (impact 5→1) x 5 cols (likelihood 1→5) -->
-      <% for (let imp = 5; imp >= 1; imp--) { %>
-        <% for (let lik = 1; lik <= 5; lik++) { %>
-          <% const score = imp * lik; %>
-          <% const color = score >= 15 ? 'heatmap-red' : score >= 9 ? 'heatmap-amber' : score >= 5 ? 'heatmap-yellow' : 'heatmap-green'; %>
-          <div class="heatmap-cell <%= color %>" title="Likelihood:<%= lik %>, Impact:<%= imp %>, Score:<%= score %>">
-            <span class="heatmap-score"><%= score %></span>
-            <% const cellRisks = risks.filter(r => r.likelihood == lik && r.impact == imp); %>
-            <% for (const r of cellRisks) { %>
-              <span class="heatmap-risk-dot" title="<%= r.title %>">●</span>
-            <% } %>
-          </div>
-        <% } %>
-      <% } %>
+    <div>
+      <h1>Risk Heatmap</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
     </div>
-    <div class="heatmap-xaxis">Likelihood →</div>
+    <div class="header-actions">
+      <a href="/projects/<%= project.id %>/risks" class="btn-outline">View Risk Register</a>
+      <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+    </div>
   </div>
 
-  <div class="heatmap-legend" style="margin-top:16px;">
-    <span class="legend-item"><span class="heatmap-dot heatmap-red"></span>Critical (≥15)</span>
-    <span class="legend-item"><span class="heatmap-dot heatmap-amber"></span>High (9–14)</span>
-    <span class="legend-item"><span class="heatmap-dot heatmap-yellow"></span>Medium (5–8)</span>
-    <span class="legend-item"><span class="heatmap-dot heatmap-green"></span>Low (1–4)</span>
-  </div>
+  <% if (risks.length) { %>
+    <div class="risk-heatmap-wrap">
+      <p class="muted">
+        Click any cell to see the risks in that zone. Score = Likelihood × Impact.
+        <span class="confidence-badge confidence-high">Low</span>
+        <span class="confidence-badge confidence-medium">Medium</span>
+        <span class="confidence-badge heatmap-high-badge">High</span>
+        <span class="confidence-badge confidence-low">Critical</span>
+      </p>
+      <div class="heatmap-matrix">
+        <div class="heatmap-axis">Likelihood →</div>
+        <div>
+          <div class="heatmap-header-row">
+            <div></div>
+            <% for (let i = 1; i <= 5; i++) { %><div>Impact <%= i %></div><% } %>
+          </div>
+          <% for (let l = 5; l >= 1; l--) { %>
+            <div class="heatmap-row">
+              <div class="heatmap-row-label">L=<%= l %></div>
+              <% for (let i = 1; i <= 5; i++) { const key = l + ',' + i; const cellRisks = matrix[key] || []; const score = l * i; const cls = score >= 16 ? 'heatmap-cell-critical' : score >= 9 ? 'heatmap-cell-high' : score >= 4 ? 'heatmap-cell-med' : 'heatmap-cell-low'; %>
+                <button type="button" class="heatmap-cell <%= cellRisks.length ? cls : 'heatmap-cell-empty' %>"
+                  data-key="<%= key %>"
+                  title="L=<%= l %> × I=<%= i %> = <%= score %> (<%= cellRisks.length %> risks)">
+                  <span class="heatmap-cell-count"><%= cellRisks.length || '—' %></span>
+                  <span class="heatmap-cell-label"><%= score %></span>
+                </button>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="heatmap-detail" id="heatmapDetail" hidden>
+      <h3 id="detailTitle">Risks</h3>
+      <ul id="detailList"></ul>
+    </div>
+  <% } else { %>
+    <div class="empty-state">
+      <p>No risks extracted yet. Upload a source and run AI extraction first.</p>
+      <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary">Upload Source</a>
+    </div>
+  <% } %>
 </div>
+
+<script>
+(function(){
+  const matrixData = <%- matrixJson %>;
+  const panel = document.getElementById('heatmapDetail');
+  const title = document.getElementById('detailTitle');
+  const list = document.getElementById('detailList');
+  document.querySelectorAll('.heatmap-cell').forEach(function(cell){
+    cell.addEventListener('click', function(){
+      const key = cell.dataset.key;
+      const risks = matrixData[key] || [];
+      if (!risks.length) {
+        if (panel) panel.hidden = true;
+        return;
+      }
+      const parts = key.split(',');
+      const score = Number(parts[0]) * Number(parts[1]);
+      title.textContent = 'Risks - Likelihood ' + parts[0] + ' × Impact ' + parts[1] + ' (Score: ' + score + ')';
+      list.innerHTML = '';
+      risks.forEach(function(r){
+        const li = document.createElement('li');
+        if (r.category) {
+          const badge = document.createElement('span');
+          badge.className = 'badge-muted';
+          badge.textContent = r.category;
+          li.appendChild(badge);
+        }
+        li.appendChild(document.createTextNode(' ' + (r.title || 'Untitled risk')));
+        list.appendChild(li);
+      });
+      panel.hidden = false;
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
+})();
+</script>

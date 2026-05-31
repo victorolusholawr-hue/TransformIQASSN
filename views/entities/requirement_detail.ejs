@@ -1,1 +1,112 @@
-<%- include('detail') %>
+<div class="container">
+  <div class="page-header">
+    <div>
+      <h1><%= entity.title %></h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>/requirements">Requirements</a> &rsaquo; <%= project.name %></p>
+    </div>
+    <div class="header-actions">
+      <% if (member.role !== 'viewer') { %>
+        <form method="POST" action="/projects/<%= project.id %>/requirements/<%= entity.id %>/confirm">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn-primary">Confirm</button>
+        </form>
+        <form method="POST" action="/projects/<%= project.id %>/requirements/<%= entity.id %>/reject">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn-outline">Reject</button>
+        </form>
+        <form method="POST" action="/projects/<%= project.id %>/requirements/<%= entity.id %>/delete" onsubmit="return confirm('Delete this requirement?')">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn-danger">Delete</button>
+        </form>
+      <% } %>
+      <a href="/projects/<%= project.id %>/requirements" class="btn-outline">Back to Requirements</a>
+    </div>
+  </div>
+
+  <% if (entity.needs_review) { %>
+    <div class="notice notice-warning" style="margin-bottom:16px;">Flagged as a possible duplicate. Review before confirming.</div>
+  <% } %>
+
+  <div class="requirement-detail-grid">
+    <main>
+      <div class="section">
+        <div class="section-header"><h3>Description</h3></div>
+        <div class="section-body entity-section-body">
+          <p><%= entity.description || 'No description.' %></p>
+          <% if (entity.source_quote) { %>
+            <div class="source-quote entity-source-quote">
+              <strong>Source quote</strong>
+              <%= entity.source_quote %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <% if (member.role !== 'viewer') { %>
+        <form method="POST" action="/projects/<%= project.id %>/requirements/<%= entity.id %>/edit" class="card entity-edit-card">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="redirect_to" value="/projects/<%= project.id %>/requirements/<%= entity.id %>">
+          <h2>Edit</h2>
+          <div class="form-group">
+            <label class="form-label">Title</label>
+            <input type="text" name="title" class="form-input" value="<%= entity.title || '' %>" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea name="description" class="form-input form-textarea" rows="3"><%= entity.description || '' %></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <select name="req_type" class="form-input">
+                <option value="functional" <%= entity.req_type === 'functional' ? 'selected' : '' %>>Functional</option>
+                <option value="non-functional" <%= entity.req_type === 'non-functional' ? 'selected' : '' %>>Non-Functional</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Priority</label>
+              <select name="priority" class="form-input">
+                <option value="high" <%= entity.priority === 'high' ? 'selected' : '' %>>High</option>
+                <option value="medium" <%= entity.priority === 'medium' || !entity.priority ? 'selected' : '' %>>Medium</option>
+                <option value="low" <%= entity.priority === 'low' ? 'selected' : '' %>>Low</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-input">
+              <option value="pending" <%= entity.status === 'pending' || !entity.status ? 'selected' : '' %>>Draft</option>
+              <option value="confirmed" <%= entity.status === 'confirmed' ? 'selected' : '' %>>Confirmed</option>
+              <option value="rejected" <%= entity.status === 'rejected' ? 'selected' : '' %>>Rejected</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Save Changes</button>
+          </div>
+        </form>
+      <% } %>
+    </main>
+
+    <aside class="card requirement-detail-card">
+      <h2>Details</h2>
+      <% const conf = Number(entity.confidence || 0.7); %>
+      <dl class="entity-detail-list">
+        <dt>Type</dt>
+        <dd><span class="badge-info"><%= entity.req_type || 'functional' %></span></dd>
+        <dt>Priority</dt>
+        <dd><span class="<%= entity.priority === 'high' ? 'badge-danger' : entity.priority === 'medium' || !entity.priority ? 'badge-warning' : 'badge-muted' %>"><%= entity.priority || 'medium' %></span></dd>
+        <dt>Status</dt>
+        <dd><span class="<%= entity.status === 'confirmed' ? 'badge-success' : entity.status === 'rejected' ? 'badge-danger' : 'badge-muted' %>"><%= entity.status === 'pending' || !entity.status ? 'draft' : entity.status %></span></dd>
+        <dt>Confidence</dt>
+        <dd><span class="confidence-badge <%= conf >= 0.8 ? 'confidence-badge-high' : conf >= 0.5 ? 'confidence-badge-med' : 'confidence-badge-low' %>"><%= Math.round(conf * 100) %>%</span></dd>
+      </dl>
+
+      <% if (source) { %>
+        <div class="source-card-divider">
+          <p class="entity-detail-label">Source</p>
+          <a href="/sources/<%= source.id %>" class="btn-outline btn-sm"><%= source.name %></a>
+        </div>
+      <% } %>
+    </aside>
+  </div>
+</div>

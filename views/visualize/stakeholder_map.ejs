@@ -1,51 +1,117 @@
-<div class="container">
+<div class="container-wide">
   <div class="page-header">
-    <h1>Stakeholder Map</h1>
-    <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+    <div>
+      <h1>Stakeholder Map</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <a href="/projects/<%= project.id %>/stakeholders" class="btn-outline">Stakeholders</a>
   </div>
+
   <% if (!stakeholders.length) { %>
     <div class="empty-state"><p>No stakeholders extracted yet.</p></div>
   <% } else { %>
-    <div class="card" style="padding:24px;">
-      <canvas id="stakeholder-chart" width="600" height="480"></canvas>
+    <div class="stakeholder-map-layout">
+      <div class="stakeholder-chart-container">
+        <canvas id="stakeholderChart"></canvas>
+      </div>
+      <aside class="card stakeholder-side-list">
+        <h3>Stakeholders (<%= stakeholders.length %>)</h3>
+        <% for (const s of stakeholders) { %>
+          <div class="stakeholder-side-row">
+            <strong><%= s.name %></strong>
+            <span class="muted"><%= s.role || '' %></span>
+            <span class="muted">Influence: <%= s.influence || '?' %>/5 · Interest: <%= s.interest || '?' %>/5</span>
+          </div>
+        <% } %>
+      </aside>
     </div>
-    <div class="stakeholder-legend">
-      <% for (const s of stakeholders) { %>
-        <div class="legend-item-row">
-          <span class="legend-dot" style="background:var(--primary)"></span>
-          <strong><%= s.name %></strong>
-          <span class="muted"><%= s.role || '' %></span>
-          <span class="badge-info">Inf:<%= s.influence||'?' %> Int:<%= s.interest||'?' %></span>
-        </div>
-      <% } %>
+
+    <div class="quadrant-grid">
+      <div><strong class="text-danger">Manage Closely</strong><span>High Influence, High Interest</span></div>
+      <div><strong class="text-warning">Keep Satisfied</strong><span>High Influence, Low Interest</span></div>
+      <div><strong class="text-info">Keep Informed</strong><span>Low Influence, High Interest</span></div>
+      <div><strong class="muted">Monitor</strong><span>Low Influence, Low Interest</span></div>
     </div>
   <% } %>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
-const stakeholders = <%- JSON.stringify(stakeholders.map(s=>({x:s.interest||0,y:s.influence||0,label:s.name}))) %>;
-new Chart(document.getElementById('stakeholder-chart'), {
-  type: 'scatter',
-  data: {
-    datasets: [{
-      label: 'Stakeholders',
-      data: stakeholders,
-      backgroundColor: 'rgba(114,36,108,0.7)',
-      pointRadius: 10,
-    }]
-  },
-  options: {
-    plugins: {
-      tooltip: {
-        callbacks: {
-          label: ctx => stakeholders[ctx.dataIndex].label + ` (Int:${ctx.parsed.x}, Inf:${ctx.parsed.y})`
+(function(){
+  const data = <%- JSON.stringify(scatterData) %>;
+  const canvas = document.getElementById('stakeholderChart');
+  if (!canvas || !window.Chart) return;
+  const palette = ['#72246c','#41b6e6','#48a23f','#f0b323','#dc6b2f','#c2188b','#3a5dae','#0D9488','#7c3aed','#be185d'];
+
+  new Chart(canvas.getContext('2d'), {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: 'Stakeholders',
+        data: data.map(function(d){ return { x: d.x, y: d.y, label: d.label, role: d.role }; }),
+        backgroundColor: data.map(function(_, i){ return palette[i % palette.length] + 'cc'; }),
+        borderColor: data.map(function(_, i){ return palette[i % palette.length]; }),
+        borderWidth: 2,
+        pointRadius: 28,
+        pointHoverRadius: 32
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          min: 0, max: 6,
+          title: { display: true, text: 'Interest →', font: { size: 13, weight: '600' } },
+          ticks: { callback: function(v){ return ['', 'Very Low', 'Low', 'Medium', 'High', 'Very High'][v] || ''; } }
+        },
+        y: {
+          min: 0, max: 6,
+          title: { display: true, text: 'Influence ↑', font: { size: 13, weight: '600' } },
+          ticks: { callback: function(v){ return ['', 'Very Low', 'Low', 'Medium', 'High', 'Very High'][v] || ''; } }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: function(items){ return items[0] ? items[0].raw.label : ''; },
+            label: function(item){
+              const d = item.raw;
+              const lines = [];
+              if (d.role) lines.push('Role: ' + d.role);
+              lines.push('Interest: ' + d.x + '/5   Influence: ' + d.y + '/5');
+              return lines;
+            }
+          }
         }
       }
     },
-    scales: {
-      x: { title: { display:true, text:'Interest (1–5)' }, min:0, max:6 },
-      y: { title: { display:true, text:'Influence (1–5)' }, min:0, max:6 },
-    }
-  }
-});
+    plugins: [{
+      afterDraw: function(chart) {
+        const ctx = chart.ctx;
+        chart.data.datasets[0].data.forEach(function(d, i) {
+          const point = chart.getDatasetMeta(0).data[i];
+          if (!point) return;
+          const radius = point.options ? (point.options.radius || 28) : 28;
+          const words = String(d.label || '?').split(' ');
+          const lines = words.length === 1 ? [words[0]] : [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')];
+          const maxLen = Math.max.apply(null, lines.map(function(l){ return l.length || 1; }));
+          const size = Math.max(8, Math.min(11, Math.floor((radius * 1.5 / maxLen) * 1.6)));
+          ctx.save();
+          ctx.fillStyle = '#fff';
+          ctx.font = '700 ' + size + 'px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = 'rgba(0,0,0,0.35)';
+          ctx.shadowBlur = 2;
+          const lineH = size + 2;
+          const startY = point.y - ((lines.length - 1) * lineH) / 2;
+          lines.forEach(function(line, idx){ ctx.fillText(line, point.x, startY + idx * lineH); });
+          ctx.restore();
+        });
+      }
+    }]
+  });
+})();
 </script>

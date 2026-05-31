@@ -8,26 +8,17 @@
   </div>
 
   <% if (last) { %>
-    <div class="notice notice-success" style="margin-bottom:20px;">
-      <strong>✓ Uploaded:</strong> <%= last.name %>
-      <span class="extraction-status">
-        <% if (last.ai_status === 'done') { %>
-          · AI extraction complete
-        <% } else if (last.extraction_status === 'done') { %>
-          · Text extracted.
-          <form method="POST" action="/sources/<%= last.id %>/extract" style="display:inline;">
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <button type="submit" class="link-button" onclick="return confirm('Extract entities with AI?')">Extract with AI →</button>
-          </form>
-        <% } else { %>
-          · <a href="/sources/<%= last.id %>">View source</a>
-        <% } %>
-      </span>
+    <div class="upload-success-bar">
+      <span class="upload-success-icon">✓</span>
+      <span><strong><%= last.name %></strong> uploaded successfully</span>
+      <a href="/sources/<%= last.id %>" class="upload-success-link">
+        <%= last.ai_status === 'pending' && last.extraction_status !== 'failed' ? 'View & Extract with AI →' : 'View source →' %>
+      </a>
     </div>
   <% } %>
 
   <div class="card">
-    <form method="POST" action="/projects/<%= project.id %>/sources/upload?_csrf=<%= csrfToken %>" enctype="multipart/form-data" id="upload-form">
+    <form method="POST" action="/projects/<%= project.id %>/sources/upload" enctype="multipart/form-data" id="upload-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 
       <div class="form-group">
@@ -46,7 +37,7 @@
           <label class="form-label">Source Type</label>
           <select name="source_type" class="form-input">
             <option value="">Select type...</option>
-            <option value="meeting_transcript">Meeting Transcript</option>
+            <option value="transcript">Meeting Transcript</option>
             <option value="document">Document</option>
             <option value="presentation">Presentation</option>
             <option value="spreadsheet">Spreadsheet</option>

@@ -53,7 +53,7 @@ TransformIQ_Association/
 │   ├── database.js           # getPool() singleton + getMasterPool() for bootstrap
 │   └── storage.js            # saveUpload(), saveBuffer(), deleteUpload() — Azure or local
 ├── db/
-│   ├── schema.sql            # 19 tables, all IF NOT EXISTS
+│   ├── schema.sql            # 20 tables, all IF NOT EXISTS; includes idempotent ALTER TABLE migrations for new columns
 │   └── init.js               # master-first bootstrap → schema run
 ├── middleware/
 │   ├── auth.js               # loginRequired, analystRequired, adminRequired
@@ -71,10 +71,11 @@ TransformIQ_Association/
 │   ├── insights.js           # /future-state /roadmap /user-stories /acceptance-criteria /impact-matrix /voice-capture
 │   └── export.js             # /export + 5 export POST routes
 ├── services/
-│   ├── ai.js                 # callClaude(), extractChunk(), callClaudeStructured(), logUsage(), isRateLimited()
-│   ├── fileParser.js         # parseFile() — PDF/DOCX/XLSX/TXT/image → { text, metadata }
+│   ├── ai.js                 # callClaude(), extractChunk(), callClaudeStructured(), logUsage(), isRateLimited(); exports CHUNK_SIZE, MAX_CHUNKS, MAX_TEXT_CHARS, assertAiConfigured
+│   ├── fileParser.js         # parseFile() — PDF/DOCX/XLSX/TXT/image → { text, metadata }; Claude Vision fallback for images
 │   ├── graphBuilder.js       # buildGraphEdges() — infers relationships, inserts into GraphEdges
-│   └── exportBuilder.js      # buildBrd(), buildFrd(), buildRiskRegister(), buildExecutiveSummary(), buildFutureState()
+│   ├── exportBuilder.js      # buildBrd(), buildFrd(), buildRiskRegister(), buildExecutiveSummary(), buildFutureState()
+│   └── mssqlSessionStore.js  # Custom express-session store backed by dbo.Sessions; get/set/destroy/touch/prune methods
 ├── public/
 │   ├── favicon.svg           # SVG favicon — white "T" on rounded #72246c square; linked in layout.ejs
 │   ├── css/style.css         # All styles — CSS variables, Association purple #72246c
@@ -94,9 +95,10 @@ TransformIQ_Association/
     ├── admin/                # usage.ejs — token stats + rate limit settings
     ├── projects/             # create.ejs, detail.ejs (sidebar layout), edit.ejs
     ├── sources/              # list.ejs, upload.ejs, detail.ejs
-    ├── entities/             # _list.ejs (shared), requirements.ejs, stakeholders.ejs,
+    ├── entities/             # Each entity type has a dedicated custom list view (no longer shared _list.ejs):
+    │                         # requirements.ejs, stakeholders.ejs (with duplicate review panel + merge modal),
     │                         # processes.ejs, decisions.ejs, risks.ejs, business_rules.ejs,
-    │                         # systems.ejs, kpis.ejs, detail.ejs, requirement_detail.ejs
+    │                         # systems.ejs, kpis.ejs, detail.ejs, requirement_detail.ejs (two-column with sidebar)
     ├── graph/                # view.ejs (Cytoscape.js), traceability.ejs
     ├── visualize/            # process_map.ejs, raci.ejs, stakeholder_map.ejs,
     │                         # gap_analysis.ejs, risk_heatmap.ejs
@@ -117,7 +119,7 @@ TransformIQ_Association/
 | `dbo.Sources` | `id`, `project_id`, `name`, `source_type`, `file_url`, `file_ext`, `extracted_text`, `extraction_status`, `ai_status`, `chunks_total`, `participants` JSON, `metadata` JSON |
 | `dbo.Requirements` | `id`, `project_id`, `source_id`, `req_type`, `title`, `description`, `priority`, `status` (pending\|confirmed\|rejected), `confidence`, `source_quote`, `duplicate_candidates` JSON, `needs_review` BIT |
 | `dbo.Processes` | `id`, `project_id`, `source_id`, `name`, `description`, `steps` JSON, `mermaid_syntax`, `confidence`, `source_quote` |
-| `dbo.Stakeholders` | `id`, `project_id`, `source_id`, `name`, `role`, `organization`, `influence` INT, `interest` INT, `confidence`, `source_quote` |
+| `dbo.Stakeholders` | `id`, `project_id`, `source_id`, `name`, `role`, `organization`, `influence` INT, `interest` INT, `confidence`, `source_quote`, `duplicate_candidates` JSON, `needs_review` BIT |
 | `dbo.Decisions` | `id`, `project_id`, `source_id`, `title`, `description`, `rationale`, `decision_maker`, `status`, `confidence`, `source_quote` |
 | `dbo.Risks` | `id`, `project_id`, `source_id`, `title`, `description`, `category`, `likelihood` INT, `impact` INT, `mitigation`, `owner`, `confidence`, `source_quote` |
 | `dbo.BusinessRules` | `id`, `project_id`, `source_id`, `title`, `description`, `category`, `confidence`, `source_quote` |
@@ -130,6 +132,7 @@ TransformIQ_Association/
 | `dbo.UsageStats` | `stat_key` PK, `input_tokens`, `output_tokens`, `calls`, `updated_at` |
 | `dbo.RateEvents` | `id`, `user_id`, `project_id`, `action`, `called_at` |
 | `dbo.AppSettings` | `setting_key` PK, `setting_value` |
+| `dbo.Sessions` | `sid` (NVARCHAR(255) PK), `sess` (NVARCHAR(MAX) JSON), `expires_at` DATETIME2, `updated_at` DATETIME2; indexed on `expires_at` |
 
 JSON fields (`tags`, `steps`, `integrations`, `participants`, `metadata`, `content`, etc.) stored as `NVARCHAR(MAX)` — parsed with `JSON.parse()` and written with `JSON.stringify()` in the JS layer. Never pass raw JSON strings directly; always parse before use.
 
@@ -143,13 +146,17 @@ analystRequired(req, res, next) // wraps loginRequired; blocks role='viewer'
 adminRequired(req, res, next)   // blocks role!='admin'
 ```
 
-`loginRequired` always does a live DB check (`SELECT id FROM dbo.Users WHERE id = @id`) to guard against stale sessions after DB resets or account deletion.
+`loginRequired` always does a live DB check (`SELECT id FROM dbo.Users WHERE id = @id`) to guard against stale sessions after DB resets or account deletion. On failure, it redirects to `loginPath(req)` — which constructs `/login?next=<originalUrl>` so the user returns to their intended page after signing in.
+
+`loginPath(req)` in `middleware/auth.js` — builds the login redirect URL, preserving the current path as `?next=`.
+
+`safeNextPath(next)` in `routes/auth.js` — validates the `next` param on login: rejects empty strings, non-root paths, double-slashes, and backslash URLs (open-redirect prevention); defaults to `/dashboard`.
 
 Session keys: `userId` (string/UUID), `role`, `name`.
 
 `projectAccessRequired` in `middleware/projectAccess.js` queries `dbo.ProjectMembers` for `(project_id, user_id)`, attaches `req.project` and `req.projectMember`, returns 404 if not a member.
 
-CSRF: every POST/PUT/DELETE request must include `_csrf` matching `req.session.csrfToken`. All EJS forms include `<input type="hidden" name="_csrf" value="<%= csrfToken %>">`. Token available in templates via `res.locals.csrfToken`.
+CSRF: every POST/PUT/DELETE request must include `_csrf` matching `req.session.csrfToken`. All EJS forms include `<input type="hidden" name="_csrf" value="<%= csrfToken %>">`. Token available in templates via `res.locals.csrfToken`. `tiqFetchJson` always sets the `X-CSRF-Token` request header for all non-GET requests (regardless of body type), so FormData AJAX requests are not rejected by CSRF middleware.
 
 ## URL Routes
 
@@ -374,6 +381,39 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 - `.voice-controls` / `.rec-btn` / `.rec-btn-start` / `.rec-btn-pause` / `.rec-btn-stop` — recording controls
 - `.rec-meta` / `.speaker-label` — meta row below recording buttons
 
+**Entity list / detail classes:**
+- `.entity-filter-bar` — flex filter row (confidence slider, status dropdown) above entity tables
+- `.entity-section-body` — content area within entity detail sections
+- `.entity-edit-card` — card wrapper for inline edit form
+- `.entity-detail-list` / `.entity-detail-label` — definition list rows in entity detail sidebar
+- `.entity-source-quote` — styled blockquote for verbatim source text on detail pages
+- `.entity-table-quote` — truncated source quote cell inside entity tables
+- `.confidence-badge-high` / `.confidence-badge-med` / `.confidence-badge-low` — colour-coded confidence pills
+- `.btn-warning` — amber warning button variant
+- `.inline-actions` — flex row of compact action buttons
+
+**Stakeholder duplicate review classes:**
+- `.stakeholder-filter-bar` — filter row specific to stakeholder list
+- `.duplicate-review-panel` / `.duplicate-review-header` / `.duplicate-review-row` — review panel container and rows
+- `.duplicate-review-candidates` / `.duplicate-chip` — candidate chip list within each duplicate row
+- `.modal-backdrop` / `.modal-panel` — full-screen modal overlay and centered panel
+
+**Sources table classes:**
+- `.sources-table` — full-width table for sources list
+- `.table-method` / `.table-actions` / `.table-help` / `.table-error` — table cell utility classes
+- `.upload-success-bar` / `.upload-success-icon` / `.upload-success-link` — compact success notification bar on upload page
+
+**Visualize page classes:**
+- `.risk-heatmap-wrap` / `.heatmap-matrix` / `.heatmap-axis` / `.heatmap-header-row` / `.heatmap-row` / `.heatmap-row-label` — risk heatmap layout
+- `.heatmap-cell` / `.heatmap-cell-empty` / `.heatmap-cell-low` / `.heatmap-cell-med` / `.heatmap-cell-high` / `.heatmap-cell-critical` — heatmap cell colour zones
+- `.heatmap-cell-count` / `.heatmap-cell-label` / `.heatmap-detail` / `.heatmap-high-badge` — heatmap cell internals
+- `.raci-sticky` — sticky first column/header in RACI table; `.raci-cell` — clickable cell; `.raci-readonly` — read-only state; `.raci-R` / `.raci-A` / `.raci-C` / `.raci-I` / `.raci-S` — RACI assignment colour variants
+- `.mermaid-container` — scrollable wrapper for Mermaid diagrams; `.process-steps` — ordered step list; `.source-quote` — verbatim quote block on process map
+- `.stakeholder-map-layout` / `.stakeholder-chart-container` / `.stakeholder-side-list` / `.stakeholder-side-row` — two-column stakeholder map layout
+- `.quadrant-grid` — 2×2 strategic quadrant reference grid below stakeholder chart
+- `.gap-list` / `.gap-item` / `.gap-header` / `.gap-row` / `.gap-label` / `.gap-issue` / `.gap-recommendation` / `.reco-list` — gap analysis layout
+- `.requirement-detail-grid` — two-column CSS grid for requirement detail page
+
 **Responsive breakpoints:**
 - `≤768px` — hamburger nav, stacked layout
 - `≤640px` — single column, full-width buttons, 44px touch targets
@@ -392,6 +432,9 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 | `DB_PASSWORD` | Yes | SQL Server password |
 | `ANTHROPIC_API_KEY` | For AI features | Claude API key (`sk-ant-...`) |
 | `ANTHROPIC_MODEL` | No | Claude model ID (default `claude-opus-4-7`) |
+| `AI_CHUNK_SIZE` | No | Characters per extraction chunk (default 6000, min 1000) |
+| `AI_MAX_CHUNKS` | No | Max chunks per source (default 25); `MAX_TEXT_CHARS = CHUNK_SIZE × MAX_CHUNKS` |
+| `SESSION_STORE` | No | Set to `memory` to use in-memory sessions instead of MSSQL (useful in tests) |
 | `AZURE_STORAGE_CONNECTION_STRING` | Production only | Leave blank to use local disk |
 | `AZURE_STORAGE_CONTAINER` | Production only | Blob container name |
 
@@ -399,16 +442,51 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 
 ### Entity Extraction Pipeline
 1. Analyst uploads source file (PDF, DOCX, XLSX, TXT, image)
-2. `fileParser.js` extracts plain text + metadata
-3. Text is chunked into 6,000-char pieces
-4. Each chunk sent to Claude via `extractChunk()` using the 8-entity system prompt
-5. Entities inserted into their respective tables (Requirements, Stakeholders, etc.)
-6. `graphBuilder.buildGraphEdges()` infers relationships between entities via text matching → inserts into `GraphEdges`
+2. `fileParser.js` extracts plain text + metadata; images first try Tesseract OCR, then fall back to **Claude Vision** (`parseImageWithVision()`) for richer extraction of diagrams, org charts, and tables
+3. Text is chunked into `AI_CHUNK_SIZE`-char pieces (default 6,000); capped at `AI_MAX_CHUNKS` total (default 25)
+4. Each chunk sent to Claude via `extractChunk()` with the 8-entity system prompt; up to 2 retries per failed chunk with exponential backoff
+5. JSON responses parsed with `extractJsonObject()` + `parseJsonLenient()` (handles markdown fences and unescaped control chars)
+6. Old entities for the source are cleared before each extraction run; new entities inserted with stakeholder duplicate candidates computed at insert time
+7. `graphBuilder.buildGraphEdges()` infers relationships between entities → inserts into `GraphEdges`; graph is also rebuilt after entity edits/deletes
+
+### MSSQL Session Store
+- Sessions are persisted in `dbo.Sessions` via `services/mssqlSessionStore.js` — a custom `express-session` compatible store
+- Sessions survive container restarts and support horizontal scaling
+- TTL is 7 days (`sessionMaxAge`); `rolling: true` auto-extends on each request
+- Set `SESSION_STORE=memory` to revert to in-memory store (dev/testing only — sessions lost on restart)
+- `prune()` deletes expired sessions; called automatically on `set()`
+
+### Post-Login Redirect
+- `loginRequired` redirects to `/login?next=<originalUrl>` so users return to their intended page after authenticating
+- Login form includes a hidden `next` field; `safeNextPath()` validates it before redirect (prevents open-redirect attacks)
 
 ### Knowledge Graph
 - Cytoscape.js viewer at `/projects/:id/graph`
 - JSON data endpoint at `/projects/:id/graph/data` returns elements format with nodes (colour-coded by type) and edges
 - Node colours match `.ec-*` brand colours
+- Traceability matrix accessible via three route aliases: `/projects/:id/traceability`, `/projects/:id/graph/traceability`, `/projects/:id/graph/matrix`
+
+### Stakeholder Duplicate Detection
+- At extraction time, each new stakeholder is compared against existing ones using name similarity (>50% token overlap or substring match)
+- Matches stored as `duplicate_candidates` JSON array on the stakeholder; `needs_review` BIT set to 1
+- Stakeholder list page shows a **Duplicate Review Panel** above the main table when `needs_review` rows exist
+- Each candidate pair has a Merge button that opens a modal to select which record to keep; merge clears `needs_review` on both records
+- `POST /projects/:id/stakeholders/:eid/merge` handles the merge: transfers GraphEdge references, deletes the discarded record, triggers graph rebuild
+
+### Entity List Pages
+All 8 entity type list pages are now fully custom (no longer use a shared `_list.ejs` template):
+- **Risks** — table with calculated risk score badge (critical ≥16, high ≥9, medium ≥4), colour-coded; links to risk heatmap
+- **Processes** — table with step count and per-row Map button linking to process-map visualisation
+- **Decisions** — table with status filter dropdown and colour-coded status badges
+- **Systems** — table with system_type badge and integrations list
+- **KPIs** — table with frequency badge and owner column
+- **Business Rules** — table with category badge
+- All pages include a confidence slider filter and per-row delete
+
+### Requirement Detail Page
+- Two-column layout: main content (title, description, edit form) + sidebar (type/priority/status/confidence badges, source quote, confirm/reject/delete actions)
+- Breadcrumb navigation back to requirements list
+- Smart redirect: confirm/reject from detail page stays on detail; from list page returns to list
 
 ### AI Insights
 Each insight type is generated by `callClaudeStructured()` with the full entity dataset as context — `hasEntities()` + `entityLines()` helpers in `routes/insights.js` build entity-aware prompts. Results stored in `dbo.AIInsights` with UNIQUE(project_id, type) — regenerating overwrites the previous result. Six insight types: future-state, roadmap, user-stories, acceptance-criteria, impact-matrix, voice-capture.
@@ -473,7 +551,7 @@ docker compose up --build -d
 - No email notifications
 - `public/uploads/` stored on container filesystem — lost on `docker compose down -v`; use Azure Blob in production
 - Puppeteer PDF generation requires Chromium inside the Docker image; cold start can be slow on first export
-- No horizontal scaling — sessions are in-memory (add `connect-mssql-v2` session store for multi-instance)
+- Sessions persisted to `dbo.Sessions` via `mssqlSessionStore.js` — horizontal scaling requires a shared SQL Server instance (already supported) or a Redis store
 - Tesseract OCR quality depends on image resolution; low-res images may produce partial text
 - No bulk entity import / spreadsheet upload (unlike LMS)
 - No real-time extraction progress WebSocket — polling via `/projects/:id/sources/done-ids` JSON endpoint

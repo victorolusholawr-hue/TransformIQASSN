@@ -16,6 +16,20 @@ CREATE TABLE dbo.Users (
 );
 
 -- ============================================================
+-- Sessions
+-- ============================================================
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Sessions' AND schema_id = SCHEMA_ID('dbo'))
+CREATE TABLE dbo.Sessions (
+    sid        NVARCHAR(255) NOT NULL PRIMARY KEY,
+    sess       NVARCHAR(MAX) NOT NULL,
+    expires_at DATETIME2     NOT NULL,
+    updated_at DATETIME2     NOT NULL DEFAULT GETUTCDATE()
+);
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Sessions_expires_at' AND object_id = OBJECT_ID('dbo.Sessions'))
+CREATE INDEX IX_Sessions_expires_at ON dbo.Sessions(expires_at);
+
+-- ============================================================
 -- Projects
 -- ============================================================
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Projects' AND schema_id = SCHEMA_ID('dbo'))
@@ -116,8 +130,16 @@ CREATE TABLE dbo.Stakeholders (
     interest     INT              NULL, -- 1-5
     confidence   DECIMAL(3,2)     NULL,
     source_quote NVARCHAR(500)    NULL,
+    duplicate_candidates NVARCHAR(MAX) NULL, -- JSON array of IDs
+    needs_review BIT              NOT NULL DEFAULT 0,
     created_at   DATETIME2        NOT NULL DEFAULT GETUTCDATE()
 );
+
+IF COL_LENGTH('dbo.Stakeholders', 'duplicate_candidates') IS NULL
+ALTER TABLE dbo.Stakeholders ADD duplicate_candidates NVARCHAR(MAX) NULL;
+
+IF COL_LENGTH('dbo.Stakeholders', 'needs_review') IS NULL
+ALTER TABLE dbo.Stakeholders ADD needs_review BIT NOT NULL CONSTRAINT DF_Stakeholders_needs_review DEFAULT 0;
 
 -- ============================================================
 -- Decisions

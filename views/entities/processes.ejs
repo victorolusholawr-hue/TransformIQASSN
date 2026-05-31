@@ -1,3 +1,61 @@
-<% const type='processes', label='Processes', icon='⚙️', color='green', showStatusFilter=false; %>
-<% const statusOptions='[]'.replace('[','').replace(']','').split(',').filter(Boolean); %>
-<%- include('_list', { type, label, icon, color, entities, project, member, filters, showStatusFilter, statusOptions, csrfToken }) %>
+<div class="container-wide">
+  <div class="page-header">
+    <div>
+      <h1>Processes <span class="count-badge"><%= entities.length %></span></h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <div class="header-actions">
+      <a href="/projects/<%= project.id %>/visualize/process-map" class="btn-outline">View Process Maps</a>
+      <a href="/projects/<%= project.id %>" class="btn-outline">Back to Project</a>
+    </div>
+  </div>
+
+  <% if (!entities.length) { %>
+    <div class="card empty-state">
+      <p><%= filters.confidence_min ? 'No processes match your filter.' : 'No processes extracted yet.' %></p>
+      <% if (filters.confidence_min) { %><a href="/projects/<%= project.id %>/processes" class="btn-outline">Clear</a><% } %>
+    </div>
+  <% } else { %>
+    <div class="section">
+      <form method="GET" class="filter-bar entity-filter-bar">
+        <label>Min confidence:</label>
+        <input type="range" name="confidence_min" min="0" max="1" step="0.1"
+          value="<%= filters.confidence_min || '0' %>"
+          oninput="document.getElementById('confVal').textContent=parseFloat(this.value).toFixed(1)"
+          onchange="this.form.submit()">
+        <span class="filter-confidence-val" id="confVal"><%= Number(filters.confidence_min || 0).toFixed(1) %></span>
+        <% if (filters.confidence_min) { %><a href="/projects/<%= project.id %>/processes" class="btn-outline btn-sm">Clear</a><% } %>
+      </form>
+
+      <div class="table-wrap">
+        <table class="students-table entity-table">
+          <thead>
+            <tr><th>Name</th><th>Description</th><th>Steps</th><th>Diagram</th><th>Confidence</th><th></th></tr>
+          </thead>
+          <tbody>
+            <% for (const e of entities) { const conf = Number(e.confidence || 0.7); const steps = Array.isArray(e.steps) ? e.steps : []; %>
+              <tr>
+                <td class="cell-title"><a href="/projects/<%= project.id %>/processes/<%= e.id %>"><%= e.name %></a></td>
+                <td class="cell-meta"><%= e.description ? e.description.slice(0, 80) + (e.description.length > 80 ? '...' : '') : '—' %></td>
+                <td><%= steps.length %> steps</td>
+                <td><span class="<%= e.mermaid_syntax ? 'badge-success' : 'badge-muted' %>"><%= e.mermaid_syntax ? 'Yes' : '—' %></span></td>
+                <td><span class="confidence-badge <%= conf >= 0.8 ? 'confidence-badge-high' : conf >= 0.5 ? 'confidence-badge-med' : 'confidence-badge-low' %>"><%= Math.round(conf * 100) %>%</span></td>
+                <td>
+                  <div class="row-actions">
+                    <a href="/projects/<%= project.id %>/visualize/process-map?process_id=<%= e.id %>" class="btn-outline btn-sm">Map</a>
+                    <% if (member.role !== 'viewer') { %>
+                      <form method="POST" action="/projects/<%= project.id %>/processes/<%= e.id %>/delete" onsubmit="return confirm('Delete this process?')">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <button class="btn-danger btn-sm">Del</button>
+                      </form>
+                    <% } %>
+                  </div>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</div>

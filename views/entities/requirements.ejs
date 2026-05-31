@@ -40,7 +40,7 @@
       <label>Status:</label>
       <select name="status" class="form-input filter-input" onchange="this.form.submit()">
         <option value="">All</option>
-        <option value="pending" <%= filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
+        <option value="pending" <%= filters.status === 'pending' ? 'selected' : '' %>>Draft</option>
         <option value="confirmed" <%= filters.status === 'confirmed' ? 'selected' : '' %>>Confirmed</option>
         <option value="rejected" <%= filters.status === 'rejected' ? 'selected' : '' %>>Rejected</option>
       </select>
@@ -114,7 +114,7 @@
               </td>
               <td><span class="badge-info"><%= e.req_type || 'functional' %></span></td>
               <td><span class="<%= e.priority === 'high' ? 'badge-danger' : e.priority === 'medium' ? 'badge-warning' : 'badge-muted' %>"><%= e.priority || 'medium' %></span></td>
-              <td><span class="<%= e.status === 'confirmed' ? 'badge-success' : e.status === 'rejected' ? 'badge-danger' : 'badge-muted' %>"><%= e.status || 'pending' %></span></td>
+              <td><span class="<%= e.status === 'confirmed' ? 'badge-success' : e.status === 'rejected' ? 'badge-danger' : 'badge-muted' %>"><%= e.status === 'pending' || !e.status ? 'draft' : e.status %></span></td>
               <td><span class="confidence-badge"><%= Math.round((e.confidence || 0.7) * 100) %>%</span></td>
               <% if (member.role !== 'viewer') { %>
                 <td>

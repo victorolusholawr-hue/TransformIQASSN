@@ -1,9 +1,12 @@
-<div class="container">
+<div class="container-wide">
   <div class="page-header">
-    <h1>Sources</h1>
+    <div>
+      <h1>Sources</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
     <div class="header-actions">
       <% if (member.role !== 'viewer') { %>
-        <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary">+ Upload</a>
+        <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary">+ Upload Source</a>
       <% } %>
       <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
     </div>
@@ -11,51 +14,80 @@
 
   <% if (!sources.length) { %>
     <div class="empty-state">
-      <p>No sources yet. Upload a document to start extracting entities.</p>
+      <p class="empty-icon">📄</p>
+      <h2>No sources yet</h2>
+      <p>Upload documents, transcripts, or images to start extracting insights.</p>
       <% if (member.role !== 'viewer') { %>
         <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary" style="margin-top:16px;">Upload First Source</a>
       <% } %>
     </div>
   <% } else { %>
-    <div class="sources-list">
-      <% for (const s of sources) { %>
-        <div class="source-item">
-          <div class="source-item-icon">
-            <% const iconMap = {pdf:'📄',docx:'📝',xlsx:'📊',pptx:'📑',txt:'📃',png:'🖼️',jpg:'🖼️',jpeg:'🖼️',voice:'🎙️'}; %>
-            <%= iconMap[(s.file_ext||'').replace('.','').toLowerCase()] || '📁' %>
-          </div>
-          <div class="source-item-info">
-            <a href="/sources/<%= s.id %>" class="source-item-name"><%= s.name %></a>
-            <div class="source-item-meta">
-              <% if (s.source_type) { %><span class="badge-info"><%= s.source_type %></span><% } %>
-              <span class="<%= s.ai_status === 'done' ? 'badge-success' : s.ai_status === 'processing' ? 'badge-warning' : s.ai_status === 'failed' ? 'badge-danger' : 'badge-muted' %>">
-                <%= s.ai_status === 'done' ? '✓ Extracted' : s.ai_status === 'processing' ? '⟳ Processing' : s.ai_status === 'failed' ? 'Failed' : 'Pending' %>
-              </span>
-              <span class="source-date"><%= new Date(s.created_at).toLocaleDateString() %></span>
-            </div>
-          </div>
-          <% if (member.role !== 'viewer') { %>
-          <div class="source-item-actions">
-            <% if (s.ai_status !== 'done' && s.extraction_status === 'done') { %>
-              <form method="POST" action="/sources/<%= s.id %>/extract" style="display:inline;">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <button type="submit" class="btn-sm btn-primary"><%= s.ai_status === 'failed' || s.ai_status === 'processing' ? 'Retry AI' : 'Extract AI' %></button>
-              </form>
-              <% if (s.ai_status === 'processing') { %>
-                <form method="POST" action="/sources/<%= s.id %>/reset-ai" style="display:inline;">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button type="submit" class="btn-sm btn-outline">Reset</button>
-                </form>
-              <% } %>
+    <div class="section">
+      <div class="table-wrap">
+        <table class="students-table entity-table sources-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Words</th>
+              <th>Method</th>
+              <th>Text Status</th>
+              <th>AI Status</th>
+              <th>Uploaded</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% for (const s of sources) { %>
+              <% const staleProcessing = s.ai_status === 'processing'; %>
+              <% const imageNeedsVision = (s.source_type === 'image') || (s.metadata && s.metadata.extraction_method === 'ocr-needs-vision'); %>
+              <% const canExtract = member.role !== 'viewer' && (s.extraction_status === 'done' || imageNeedsVision) && s.ai_status !== 'done'; %>
+              <tr>
+                <td class="cell-title">
+                  <a href="/sources/<%= s.id %>"><%= s.name %></a>
+                  <% if (s.metadata && s.metadata.ai_error) { %>
+                    <div class="table-help table-error"><%= s.metadata.ai_error %></div>
+                  <% } %>
+                </td>
+                <td><span class="badge-muted"><%= s.source_type || 'document' %></span></td>
+                <td><%= s.metadata && s.metadata.word_count ? Number(s.metadata.word_count).toLocaleString() : 0 %></td>
+                <td class="muted table-method"><%= s.metadata && s.metadata.extraction_method ? s.metadata.extraction_method : '—' %></td>
+                <td>
+                  <span class="<%= s.extraction_status === 'done' ? 'badge-success' : s.extraction_status === 'failed' ? 'badge-danger' : 'badge-warning' %>">
+                    <%= s.extraction_status || 'pending' %>
+                  </span>
+                </td>
+                <td>
+                  <span class="status-<%= s.ai_status || 'pending' %>">
+                    <%= s.ai_status === 'done' ? '✓ Done' : s.ai_status === 'processing' ? 'Processing...' : s.ai_status === 'failed' ? 'Failed' : 'Pending' %>
+                  </span>
+                </td>
+                <td class="muted"><%= s.created_at ? new Date(s.created_at).toLocaleDateString() : '—' %></td>
+                <td>
+                  <div class="table-actions">
+                    <a href="/sources/<%= s.id %>" class="btn-outline btn-sm">View</a>
+                    <% if (canExtract) { %>
+                      <a href="/sources/<%= s.id %>" class="btn-primary btn-sm"><%= staleProcessing || s.ai_status === 'failed' ? 'Retry AI' : 'Extract AI' %></a>
+                    <% } %>
+                    <% if (member.role !== 'viewer' && staleProcessing) { %>
+                      <form method="POST" action="/sources/<%= s.id %>/reset-ai">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <button type="submit" class="btn-outline btn-sm">Reset</button>
+                      </form>
+                    <% } %>
+                    <% if (member.role !== 'viewer') { %>
+                      <form method="POST" action="/sources/<%= s.id %>/delete">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <button type="submit" class="btn-danger btn-sm" onclick="return confirm('Delete this source and all its extracted entities?')">Delete</button>
+                      </form>
+                    <% } %>
+                  </div>
+                </td>
+              </tr>
             <% } %>
-            <form method="POST" action="/sources/<%= s.id %>/delete" style="display:inline;">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button type="submit" class="btn-sm btn-danger" onclick="return confirm('Delete this source?')">Delete</button>
-            </form>
-          </div>
-          <% } %>
-        </div>
-      <% } %>
+          </tbody>
+        </table>
+      </div>
     </div>
   <% } %>
 </div>

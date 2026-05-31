@@ -1,33 +1,44 @@
-<div class="container">
+<div class="container-wide">
   <div class="page-header">
-    <h1>RACI Matrix</h1>
+    <div>
+      <h1>RACI Matrix</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
     <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
   </div>
 
-  <% if (!processes.length || !stakeholders.length) { %>
-    <div class="empty-state"><p>Need both Processes and Stakeholders to build a RACI matrix.</p></div>
-  <% } else { %>
-    <div class="table-wrap">
-      <table class="raci-table">
+  <div class="notice notice-info" style="margin-bottom:16px;">
+    <strong>R</strong> = Responsible | <strong>A</strong> = Accountable | <strong>C</strong> = Consulted |
+    <strong>I</strong> = Informed | <strong>S</strong> = Support. Click any cell to assign or clear a role.
+  </div>
+
+  <div id="raciSaveMsg" class="save-toast" hidden>✓ Saved</div>
+
+  <% if (processes.length && stakeholders.length) { %>
+    <div class="section table-wrap">
+      <table class="raci-table <%= member.role === 'viewer' ? 'raci-readonly' : '' %>" id="raciTable">
         <thead>
           <tr>
-            <th>Process</th>
-            <% for (const s of stakeholders) { %><th><%= s.name %></th><% } %>
+            <th class="raci-sticky">Process</th>
+            <% for (const s of stakeholders) { %>
+              <th>
+                <%= s.name %><br>
+                <span class="muted" style="font-weight:400;font-size:0.72rem;"><%= s.role || '' %></span>
+              </th>
+            <% } %>
           </tr>
         </thead>
         <tbody>
           <% for (const p of processes) { %>
             <tr>
-              <td><strong><%= p.name %></strong></td>
-              <% for (const s of stakeholders) { %>
-                <td class="raci-cell">
-                  <select class="raci-select" data-process="<%= p.id %>" data-stakeholder="<%= s.id %>"
-                    onchange="updateRaci(this)">
-                    <option value="">—</option>
-                    <% for (const v of ['R','A','C','I']) { %>
-                      <option value="<%= v %>" <%= (raci[p.id]&&raci[p.id][s.id]===v)?'selected':'' %>><%= v %></option>
-                    <% } %>
-                  </select>
+              <td class="raci-sticky"><%= p.name %></td>
+              <% for (const s of stakeholders) { const assignment = raci[p.id] && raci[p.id][s.id] ? raci[p.id][s.id] : ''; %>
+                <td class="raci-cell <%= assignment ? 'raci-' + assignment : '' %>"
+                    data-process-id="<%= p.id %>"
+                    data-stakeholder-id="<%= s.id %>"
+                    data-value="<%= assignment %>"
+                    title="Click to cycle role for <%= s.name %> in <%= p.name %>">
+                  <%= assignment %>
                 </td>
               <% } %>
             </tr>
@@ -35,20 +46,53 @@
         </tbody>
       </table>
     </div>
-    <p class="form-hint" style="margin-top:10px;">R=Responsible, A=Accountable, C=Consulted, I=Informed</p>
+  <% } else if (!processes.length) { %>
+    <div class="empty-state"><p>No processes extracted yet.</p></div>
+  <% } else { %>
+    <div class="empty-state"><p>No stakeholders extracted yet. <a href="/projects/<%= project.id %>/stakeholders">Add stakeholders</a></p></div>
   <% } %>
 </div>
+
 <script>
-async function updateRaci(sel) {
-  await fetch('/projects/<%= project.id %>/visualize/raci/update-cell', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      _csrf:          '<%= csrfToken %>',
-      process_id:     sel.dataset.process,
-      stakeholder_id: sel.dataset.stakeholder,
-      value:          sel.value,
-    }),
+(function(){
+  const updateUrl = '/projects/<%= project.id %>/visualize/raci/update-cell';
+  const cycle = ['', 'R', 'A', 'C', 'I', 'S'];
+  const saveMsg = document.getElementById('raciSaveMsg');
+
+  function showSaved() {
+    if (!saveMsg) return;
+    saveMsg.hidden = false;
+    clearTimeout(saveMsg._timer);
+    saveMsg._timer = setTimeout(function(){ saveMsg.hidden = true; }, 1800);
+  }
+  function applyStyle(cell, val) {
+    cell.className = cell.className.replace(/\braci-[RACIS]\b/g, '').trim();
+    cell.classList.add('raci-cell');
+    if (val) cell.classList.add('raci-' + val);
+    cell.dataset.value = val;
+    cell.textContent = val;
+  }
+
+  <% if (member.role !== 'viewer') { %>
+  document.querySelectorAll('.raci-cell').forEach(function(cell){
+    cell.addEventListener('click', function(){
+      const current = cell.dataset.value || '';
+      const next = cycle[(cycle.indexOf(current) + 1) % cycle.length];
+      applyStyle(cell, next);
+      window.tiqFetchJson(updateUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          process_id: cell.dataset.processId,
+          stakeholder_id: cell.dataset.stakeholderId,
+          assignment: next
+        })
+      }).then(showSaved).catch(function(err){
+        applyStyle(cell, current);
+        alert(err.message || 'Could not save RACI update.');
+      });
+    });
   });
-}
+  <% } %>
+})();
 </script>

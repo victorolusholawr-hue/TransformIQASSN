@@ -8,7 +8,16 @@ const { loginRequired, analystRequired } = require('../middleware/auth');
 const { projectAccessRequired }          = require('../middleware/projectAccess');
 const { saveUpload }                     = require('../config/storage');
 const { parseFile, parseImageWithVision }= require('../services/fileParser');
-const { extractChunk, extractAllChunks, logUsage, isRateLimited } = require('../services/ai');
+const {
+  extractChunk,
+  extractAllChunks,
+  logUsage,
+  isRateLimited,
+  CHUNK_SIZE,
+  MAX_CHUNKS,
+  MAX_TEXT_CHARS,
+  assertAiConfigured,
+} = require('../services/ai');
 const { buildGraphEdges }                = require('../services/graphBuilder');
 const router   = express.Router();
 
@@ -59,6 +68,108 @@ async function markSourceAiStatus(pool, sourceId, status, errorMessage) {
     .query('UPDATE dbo.Sources SET ai_status=@status, metadata=@meta WHERE id=@id');
 }
 
+function parseJson(value, fallback) {
+  try { return JSON.parse(value || ''); } catch (_) { return fallback; }
+}
+
+function parseParticipants(value) {
+  if (Array.isArray(value)) return value.map(String).map(s => s.trim()).filter(Boolean);
+  return String(value || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function inferSourceType(ext, explicit) {
+  if (explicit) return explicit;
+  const e = String(ext || '').toLowerCase().replace('.', '');
+  if (['pptx'].includes(e)) return 'presentation';
+  if (['xlsx', 'xls'].includes(e)) return 'spreadsheet';
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(e)) return 'image';
+  if (e === 'txt') return 'transcript';
+  return 'document';
+}
+
+function metadataWith(base, updates) {
+  return JSON.stringify({ ...(base || {}), ...(updates || {}) });
+}
+
+async function clearSourceEntities(pool, sourceId, projectId) {
+  for (const t of ['Requirements','Stakeholders','Processes','Decisions','Risks','BusinessRules','Systems','KPIs']) {
+    await pool.request()
+      .input('sid', sql.UniqueIdentifier, sourceId)
+      .query(`DELETE FROM dbo.${t} WHERE source_id=@sid`);
+  }
+  await pool.request()
+    .input('pid', sql.UniqueIdentifier, projectId)
+    .query('DELETE FROM dbo.GraphEdges WHERE project_id=@pid');
+}
+
+async function getReadableSourceText(pool, source) {
+  let text = source.extracted_text || '';
+  let metadata = parseJson(source.metadata, {});
+  const ext = String(source.file_ext || '').toLowerCase().replace('.', '');
+  const imageExts = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
+
+  if ((!text || metadata.extraction_method === 'ocr-needs-vision') && imageExts.has(ext) && source.file_url) {
+    text = await parseImageWithVision(source.file_url);
+    metadata = {
+      ...metadata,
+      extraction_method: 'claude-vision',
+      word_count: text ? text.trim().split(/\s+/).filter(Boolean).length : 0,
+    };
+    await pool.request()
+      .input('id',   sql.UniqueIdentifier, source.id)
+      .input('text', sql.NVarChar, text || null)
+      .input('meta', sql.NVarChar, JSON.stringify(metadata))
+      .query("UPDATE dbo.Sources SET extracted_text=@text, extraction_status='done', metadata=@meta WHERE id=@id");
+  }
+
+  return { text: text || '', metadata };
+}
+
+async function finishExtraction(pool, source, userId) {
+  await markSourceAiStatus(pool, source.id, 'done');
+  try {
+    await buildGraphEdges(source.project_id);
+  } catch (err) {
+    console.error('[sources/extract] graph rebuild failed after successful extraction:', err);
+  }
+  try {
+    await logUsage(source.project_id, userId, 0, 0, 'extract');
+  } catch (err) {
+    console.error('[sources/extract] usage logging failed after successful extraction:', err);
+  }
+}
+
+function duplicateCandidates(existing, name, selfId) {
+  const words = normaliseEntityName(name);
+  if (!words.length) return [];
+  const out = [];
+  const self = String(selfId || '').toLowerCase();
+  for (const row of existing) {
+    const rowId = String(row.id || '').toLowerCase();
+    if (self && rowId === self) continue;
+    const otherWords = normaliseEntityName(row.name);
+    if (!otherWords.length) continue;
+    const set = new Set([...words, ...otherWords]);
+    const shared = words.filter(w => otherWords.includes(w));
+    const similarity = set.size ? shared.length / set.size : 0;
+    const subset = shared.length && (words.every(w => otherWords.includes(w)) || otherWords.every(w => words.includes(w)));
+    if (similarity > 0.5 || subset) out.push(String(row.id));
+  }
+  return out;
+}
+
+function normaliseEntityName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
 const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads', 'sources');
 const storage    = multer.diskStorage({
   destination: (_, __, cb) => cb(null, UPLOAD_DIR),
@@ -80,11 +191,16 @@ router.get('/projects/:projectId/sources', loginRequired, projectAccessRequired,
   const result = await pool.request()
     .input('pid', sql.UniqueIdentifier, req.params.projectId)
     .query('SELECT * FROM dbo.Sources WHERE project_id=@pid ORDER BY created_at DESC');
+  const sources = result.recordset.map(s => ({
+    ...s,
+    metadata: parseJson(s.metadata, {}),
+    participants: parseJson(s.participants, []),
+  }));
   res.render('sources/list', {
     title:   'Sources',
     project: req.project,
     member:  req.projectMember,
-    sources: result.recordset,
+    sources,
   });
 });
 
@@ -115,22 +231,31 @@ router.post('/projects/:projectId/sources/upload',
       const parsed   = await parseFile(req.file.path, ext);
       const fileUrl  = await saveUpload(req.file, 'sources');
       const id       = uuidv4();
+      const participants = parseParticipants(req.body.participants);
+      const metadata = {
+        ...(parsed.metadata || {}),
+        participants,
+      };
+      const extractionStatus = parsed.text
+        ? 'done'
+        : metadata.extraction_method === 'ocr-needs-vision' ? 'pending' : 'failed';
 
       const pool = await getPool();
       await pool.request()
         .input('id',      sql.UniqueIdentifier, id)
         .input('pid',     sql.UniqueIdentifier, req.params.projectId)
         .input('name',    sql.NVarChar,         req.file.originalname)
-        .input('stype',   sql.NVarChar,         req.body.source_type || null)
+        .input('stype',   sql.NVarChar,         inferSourceType(ext, req.body.source_type))
         .input('furl',    sql.NVarChar,         fileUrl)
         .input('fext',    sql.NVarChar,         ext)
         .input('text',    sql.NVarChar,         parsed.text || null)
-        .input('estatus', sql.NVarChar,         parsed.text ? 'done' : 'pending')
+        .input('estatus', sql.NVarChar,         extractionStatus)
         .input('uid',     sql.UniqueIdentifier, req.session.userId)
-        .input('meta',    sql.NVarChar,         JSON.stringify({ ...(parsed.metadata || {}), participants: req.body.participants || null }))
+        .input('parts',   sql.NVarChar,         JSON.stringify(participants))
+        .input('meta',    sql.NVarChar,         JSON.stringify(metadata))
         .query(`INSERT INTO dbo.Sources
-          (id, project_id, name, source_type, file_url, file_ext, extracted_text, extraction_status, uploader_id, metadata)
-          VALUES (@id, @pid, @name, @stype, @furl, @fext, @text, @estatus, @uid, @meta)`);
+          (id, project_id, name, source_type, file_url, file_ext, extracted_text, extraction_status, uploader_id, participants, metadata)
+          VALUES (@id, @pid, @name, @stype, @furl, @fext, @text, @estatus, @uid, @parts, @meta)`);
 
       res.redirect(`/projects/${req.params.projectId}/sources/upload?last=${id}`);
     } catch (err) {
@@ -200,16 +325,10 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
       return res.redirect(`/sources/${req.params.id}`);
     }
 
-    // Vision fallback for images with < 20 words
-    let text = source.extracted_text || '';
-    const meta = JSON.parse(source.metadata || '{}');
-    if (meta.extraction_method === 'ocr-needs-vision' && source.file_url) {
-      text = await parseImageWithVision(source.file_url);
-      await pool.request()
-        .input('id',   sql.UniqueIdentifier, req.params.id)
-        .input('text', sql.NVarChar, text)
-        .query("UPDATE dbo.Sources SET extracted_text=@text, extraction_status='done' WHERE id=@id");
-    }
+    assertAiConfigured();
+
+    const readable = await getReadableSourceText(pool, source);
+    const text = readable.text;
 
     if (!text || text.trim().length < 50) {
       if (wantsJson(req)) return res.json({ ok: false, error: 'Not enough text to extract.' });
@@ -219,41 +338,57 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
 
     // Init phase: return chunk count for chunked UI
     if (phase === 'init') {
-      const chunkSize   = 6000;
-      const chunksTotal = Math.ceil(text.length / chunkSize);
+      if (text.length > MAX_TEXT_CHARS) {
+        const msg = `Source text is too large for AI extraction. Please split it into ${MAX_CHUNKS} or fewer sections.`;
+        await markSourceAiStatus(pool, req.params.id, 'failed', msg);
+        return res.json({ ok: false, error: msg, redirect_url: `/sources/${req.params.id}` });
+      }
+      const chunksTotal = Math.ceil(text.length / CHUNK_SIZE);
+      await clearSourceEntities(pool, req.params.id, source.project_id);
+      const initMetadata = { ...readable.metadata };
+      delete initMetadata.ai_error;
       await pool.request()
         .input('id', sql.UniqueIdentifier, req.params.id)
         .input('n',  sql.Int, chunksTotal)
-        .query('UPDATE dbo.Sources SET chunks_total=@n WHERE id=@id');
+        .input('meta', sql.NVarChar, metadataWith(initMetadata, { ai_started_at: new Date().toISOString() }))
+        .query("UPDATE dbo.Sources SET chunks_total=@n, ai_status='pending', metadata=@meta WHERE id=@id");
       return res.json({ ok: true, chunks_total: chunksTotal, redirect_url: `/projects/${source.project_id}` });
     }
 
     if (phase === 'chunk') {
       const chunkIdx = parseInt(req.body.chunk_idx || '0', 10);
-      const chunkSize = 6000;
-      const chunksTotal = Math.ceil(text.length / chunkSize);
-      const chunkText = text.slice(chunkIdx * chunkSize, (chunkIdx + 1) * chunkSize);
-      if (!chunkText) {
-        await markSourceAiStatus(pool, req.params.id, 'failed', 'Invalid extraction section.');
-        return res.json({ ok: false, error: 'Invalid extraction section.' });
+      const retryAttempt = parseInt(req.body.retry_attempt || '0', 10);
+      const storedTotal = Number(source.chunks_total || 0);
+      const chunksTotal = Math.ceil(text.length / CHUNK_SIZE);
+      if (!Number.isInteger(chunkIdx) || chunkIdx < 0 || chunkIdx >= chunksTotal || (storedTotal && chunkIdx >= storedTotal)) {
+        const msg = 'Invalid extraction section.';
+        await markSourceAiStatus(pool, req.params.id, 'failed', msg);
+        return res.json({ ok: false, error: msg });
       }
 
       if (chunkIdx === 0) {
         await markSourceAiStatus(pool, req.params.id, 'processing');
-        for (const t of ['Requirements','Stakeholders','Processes','Decisions','Risks','BusinessRules','Systems','KPIs']) {
-          await pool.request()
-            .input('sid', sql.UniqueIdentifier, req.params.id)
-            .query(`DELETE FROM dbo.${t} WHERE source_id=@sid`);
-        }
+      } else if (source.ai_status !== 'processing') {
+        const msg = 'Extraction was restarted or reset before this section could run. Start again from section 1.';
+        await markSourceAiStatus(pool, req.params.id, 'failed', msg);
+        return res.json({ ok: false, error: msg });
       }
 
-      const entities = await extractChunk(chunkText);
+      const chunkText = text.slice(chunkIdx * CHUNK_SIZE, (chunkIdx + 1) * CHUNK_SIZE);
+      let entities;
+      try {
+        entities = await extractChunk(chunkText);
+      } catch (err) {
+        const msg = `Processing failed on section ${chunkIdx + 1}: ${safeExtractionError(err)}`;
+        if (retryAttempt >= 2) {
+          await markSourceAiStatus(pool, req.params.id, 'failed', msg);
+        }
+        return res.json({ ok: false, error: msg, redirect_url: `/sources/${req.params.id}` });
+      }
       const inserted = await _insertEntities(pool, source.project_id, req.params.id, entities);
       const done = chunkIdx >= chunksTotal - 1;
       if (done) {
-        await buildGraphEdges(source.project_id);
-        await logUsage(source.project_id, req.session.userId, 0, 0, 'extract');
-        await markSourceAiStatus(pool, req.params.id, 'done');
+        await finishExtraction(pool, source, req.session.userId);
       }
       return res.json({
         ok: true,
@@ -265,21 +400,19 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
     }
 
     // Sync / single shot
-    await markSourceAiStatus(pool, req.params.id, 'processing');
-
-    // Delete stale entities for this source
-    for (const t of ['Requirements','Stakeholders','Processes','Decisions','Risks','BusinessRules','Systems','KPIs']) {
-      await pool.request()
-        .input('sid', sql.UniqueIdentifier, req.params.id)
-        .query(`DELETE FROM dbo.${t} WHERE source_id=@sid`);
+    if (text.length > MAX_TEXT_CHARS) {
+      const msg = `Source text is too large for AI extraction. Please split it into ${MAX_CHUNKS} or fewer sections.`;
+      await markSourceAiStatus(pool, req.params.id, 'failed', msg);
+      if (wantsJson(req)) return res.json({ ok: false, error: msg });
+      req.flash('error', msg);
+      return res.redirect(`/sources/${req.params.id}`);
     }
+    await markSourceAiStatus(pool, req.params.id, 'processing');
+    await clearSourceEntities(pool, req.params.id, source.project_id);
 
     const { entities } = await extractAllChunks(text);
     await _insertEntities(pool, source.project_id, req.params.id, entities);
-    await buildGraphEdges(source.project_id);
-    await logUsage(source.project_id, req.session.userId, 0, 0, 'extract');
-
-    await markSourceAiStatus(pool, req.params.id, 'done');
+    await finishExtraction(pool, source, req.session.userId);
 
     if (wantsJson(req)) return res.json({ ok: true, done: true, redirect_url: `/projects/${source.project_id}` });
     req.flash('success', 'Entities extracted successfully.');
@@ -340,6 +473,7 @@ router.post('/sources/:id/delete', analystRequired, async (req, res) => {
   }
   await pool.request().input('id', sql.UniqueIdentifier, req.params.id)
     .query('DELETE FROM dbo.Sources WHERE id=@id');
+  await buildGraphEdges(source.project_id);
 
   req.flash('success', 'Source deleted.');
   res.redirect(`/projects/${source.project_id}/sources`);
@@ -377,9 +511,14 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
     }
   }
   if (entities.stakeholders) {
+    const existingStakeholders = await pool.request()
+      .input('pid', sql.UniqueIdentifier, projectId)
+      .query('SELECT id, name FROM dbo.Stakeholders WHERE project_id=@pid');
     for (const e of entities.stakeholders) {
+      const duplicates = duplicateCandidates(existingStakeholders.recordset, e.name || '');
+      const newId = uuid();
       await pool.request()
-        .input('id',   sql.UniqueIdentifier, uuid())
+        .input('id',   sql.UniqueIdentifier, newId)
         .input('pid',  sql.UniqueIdentifier, projectId)
         .input('sid',  sql.UniqueIdentifier, sourceId)
         .input('name', sql.NVarChar, e.name || '')
@@ -389,8 +528,11 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('int',  sql.Int, e.interest || null)
         .input('conf', sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote',sql.NVarChar, e.source_quote || null)
-        .query('INSERT INTO dbo.Stakeholders (id,project_id,source_id,name,role,organization,influence,interest,confidence,source_quote) VALUES (@id,@pid,@sid,@name,@role,@org,@inf,@int,@conf,@quote)');
+        .input('dups', sql.NVarChar, JSON.stringify(duplicates))
+        .input('review', sql.Bit, duplicates.length ? 1 : 0)
+        .query('INSERT INTO dbo.Stakeholders (id,project_id,source_id,name,role,organization,influence,interest,confidence,source_quote,duplicate_candidates,needs_review) VALUES (@id,@pid,@sid,@name,@role,@org,@inf,@int,@conf,@quote,@dups,@review)');
       inserted++;
+      existingStakeholders.recordset.push({ id: newId, name: e.name || '' });
     }
   }
   if (entities.processes) {

@@ -52,6 +52,9 @@ UPDATE dbo.Users SET role = 'admin' WHERE email = 'you@example.com';
 | `DB_PASSWORD` | SQL Server SA password |
 | `ANTHROPIC_API_KEY` | Claude API key (`sk-ant-...`) |
 | `ANTHROPIC_MODEL` | Claude model ID (default `claude-opus-4-7`) |
+| `AI_CHUNK_SIZE` | Characters per extraction chunk (default 6000) |
+| `AI_MAX_CHUNKS` | Max chunks per source (default 25) |
+| `SESSION_STORE` | Set to `memory` to skip MSSQL session persistence |
 | `AZURE_STORAGE_CONNECTION_STRING` | Azure Blob — leave blank for local dev |
 
 See [`.env.example`](.env.example) for the full list.

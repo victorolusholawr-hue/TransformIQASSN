@@ -13,20 +13,24 @@ async function _userExists(userId) {
   }
 }
 
+function loginPath(req) {
+  const target = req.originalUrl || req.url || '/dashboard';
+  return `/login?next=${encodeURIComponent(target)}`;
+}
+
 function loginRequired(req, res, next) {
   if (!req.session.userId) {
     req.flash('error', 'Please log in to continue.');
-    return res.redirect('/login');
+    return res.redirect(loginPath(req));
   }
   // Verify user still exists (guards against DB resets / deleted accounts)
   _userExists(req.session.userId).then(exists => {
     if (!exists) {
-      req.session.destroy(() => {});
-      req.flash('error', 'Session expired. Please log in again.');
-      return res.redirect('/login');
+      const redirectTo = loginPath(req);
+      return req.session.destroy(() => res.redirect(redirectTo));
     }
     next();
-  }).catch(() => res.redirect('/login'));
+  }).catch(() => res.redirect(loginPath(req)));
 }
 
 function analystRequired(req, res, next) {

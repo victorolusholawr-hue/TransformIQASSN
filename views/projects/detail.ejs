@@ -312,11 +312,9 @@
                 </td>
                 <td class="row-actions">
                   <a href="/sources/<%= s.id %>" class="btn-outline btn-sm">View</a>
-                  <% if (member.role !== 'viewer' && s.extraction_status === 'done' && s.ai_status !== 'done') { %>
-                    <form method="POST" action="/sources/<%= s.id %>/extract" style="display:inline;">
-                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                      <button type="submit" class="btn-primary btn-sm"><%= s.ai_status === 'failed' || s.ai_status === 'processing' ? 'Retry AI' : 'Extract AI' %></button>
-                    </form>
+                  <% const needsVision = (s.source_type === 'image') || (meta.extraction_method === 'ocr-needs-vision'); %>
+                  <% if (member.role !== 'viewer' && (s.extraction_status === 'done' || needsVision) && s.ai_status !== 'done') { %>
+                    <a href="/sources/<%= s.id %>" class="btn-primary btn-sm"><%= s.ai_status === 'failed' || s.ai_status === 'processing' ? 'Retry AI' : 'Extract AI' %></a>
                   <% } %>
                 </td>
               </tr>
@@ -376,17 +374,25 @@
             init.append('phase', 'init');
             return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: init })
               .then(function(meta){
+                if (!meta.ok) throw new Error(meta.error || 'Extraction initialization failed.');
                 const total = meta.chunks_total || 0;
-                function chunk(idx) {
+                function chunk(idx, attempt) {
                   if (idx >= total) return Promise.resolve();
                   btn.textContent = label + ' section ' + (idx + 1) + '/' + total + '...';
                   const f = new FormData();
                   f.append('phase', 'chunk');
                   f.append('chunk_idx', String(idx));
+                  f.append('retry_attempt', String(attempt || 0));
                   return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: f })
-                    .then(function(){ return chunk(idx + 1); });
+                    .then(function(data){
+                      if (!data.ok) {
+                        if ((attempt || 0) < 2) return chunk(idx, (attempt || 0) + 1);
+                        throw new Error(data.error || 'Extraction failed on section ' + (idx + 1) + '.');
+                      }
+                      return chunk(idx + 1, 0);
+                    });
                 }
-                return chunk(0);
+                return chunk(0, 0);
               });
           }
           function next() {

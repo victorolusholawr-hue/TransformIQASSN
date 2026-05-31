@@ -1,3 +1,353 @@
-<% const type='stakeholders', label='Stakeholders', icon='👥', color='cyan', showStatusFilter=false; %>
-<% const statusOptions='[]'.replace('[','').replace(']','').split(',').filter(Boolean); %>
-<%- include('_list', { type, label, icon, color, entities, project, member, filters, showStatusFilter, statusOptions, csrfToken }) %>
+<div class="container-wide">
+  <div class="page-header">
+    <div>
+      <h1>Stakeholders <span class="count-badge"><%= entities.length %></span></h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <div class="header-actions">
+      <% if (member.role !== 'viewer' && entities.length > 1) { %>
+        <button type="button" class="btn-outline" id="manualMergeBtn">Merge Stakeholders</button>
+      <% } %>
+      <% if (member.role !== 'viewer') { %>
+        <button type="button" class="btn-outline" id="regenBtn">↺ Regenerate</button>
+      <% } %>
+      <a href="/projects/<%= project.id %>/visualize/stakeholder-map" class="btn-outline">View Stakeholder Map</a>
+      <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+    </div>
+  </div>
+
+  <% if (member.role !== 'viewer' && typeof duplicateReview !== 'undefined' && duplicateReview.length) { %>
+    <section class="duplicate-review-panel" aria-labelledby="duplicateReviewTitle">
+      <div class="duplicate-review-header">
+        <div>
+          <h2 id="duplicateReviewTitle">Potential duplicate stakeholders</h2>
+          <p>Review these matches before they get buried in the full list.</p>
+        </div>
+        <span class="badge-warning"><%= duplicateReview.length %> to review</span>
+      </div>
+      <div class="duplicate-review-list">
+        <% for (const item of duplicateReview) { const candidates = item.duplicate_candidate_details || []; %>
+          <div class="duplicate-review-row">
+            <div class="duplicate-review-main">
+              <strong><%= item.name || 'Unnamed stakeholder' %></strong>
+              <span class="muted"><%= item.role || 'No role captured' %><%= item.organization ? ' · ' + item.organization : '' %></span>
+            </div>
+            <div class="duplicate-review-candidates">
+              <% for (const candidate of candidates) { %>
+                <span class="duplicate-chip"><%= candidate.name %><%= candidate.role ? ' · ' + candidate.role : '' %></span>
+              <% } %>
+            </div>
+            <button type="button" class="btn-warning btn-sm duplicate-review-merge-btn"
+              data-id="<%= item.id %>"
+              data-candidate="<%= candidates[0] ? candidates[0].id : '' %>">Review / Merge</button>
+          </div>
+        <% } %>
+      </div>
+    </section>
+  <% } %>
+
+  <% if (entities.length) { %>
+    <div class="section">
+      <form method="GET" class="filter-bar stakeholder-filter-bar">
+        <label for="confidence_min">Min confidence</label>
+        <input type="range" id="confidence_min" name="confidence_min" min="0" max="1" step="0.1"
+          value="<%= filters.confidence_min || '0' %>"
+          oninput="document.getElementById('confVal').textContent=parseFloat(this.value || 0).toFixed(1)"
+          onchange="this.form.submit()">
+        <span class="filter-confidence-val" id="confVal"><%= Number(filters.confidence_min || 0).toFixed(1) %></span>
+        <% if (filters.confidence_min) { %><a href="/projects/<%= project.id %>/stakeholders" class="btn-outline btn-sm">Clear</a><% } %>
+      </form>
+
+      <div class="table-wrap">
+        <table class="students-table entity-table stakeholders-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Organization</th>
+              <th>Influence</th>
+              <th>Interest</th>
+              <th>Confidence</th>
+              <% if (member.role !== 'viewer') { %><th>Actions</th><% } %>
+            </tr>
+          </thead>
+          <tbody>
+            <% for (const e of entities) { const conf = Number(e.confidence || 0.7); const dups = Array.isArray(e.duplicate_candidates) ? e.duplicate_candidates : []; %>
+              <tr data-sh-id="<%= e.id %>" data-sh-name="<%= e.name || '' %>" data-sh-role="<%= e.role || '' %>" data-sh-org="<%= e.organization || '' %>">
+                <td class="cell-title">
+                  <%= e.name %>
+                  <% if (e.needs_review) { %><span class="badge-warning" style="margin-left:6px;">Review</span><% } %>
+                </td>
+                <td><%= e.role || '—' %></td>
+                <td class="muted"><%= e.organization || '—' %></td>
+                <td style="text-align:center;"><%= e.influence || '—' %>/5</td>
+                <td style="text-align:center;"><%= e.interest || '—' %>/5</td>
+                <td>
+                  <span class="confidence-badge <%= conf >= 0.8 ? 'confidence-badge-high' : conf >= 0.5 ? 'confidence-badge-med' : 'confidence-badge-low' %>"><%= Math.round(conf * 100) %>%</span>
+                </td>
+                <% if (member.role !== 'viewer') { %>
+                  <td class="row-actions">
+                    <button type="button" class="btn-outline btn-sm sh-edit-btn"
+                      data-id="<%= e.id %>"
+                      data-name="<%= e.name || '' %>"
+                      data-role="<%= e.role || '' %>"
+                      data-org="<%= e.organization || '' %>"
+                      data-inf="<%= e.influence || '' %>"
+                      data-int="<%= e.interest || '' %>">Edit</button>
+                    <% if (e.needs_review && dups.length) { %>
+                      <button type="button" class="btn-warning btn-sm sh-merge-btn"
+                        data-id="<%= e.id %>"
+                        data-name="<%= e.name || '' %>"
+                        data-candidates="<%= dups.join(',') %>">Merge</button>
+                    <% } %>
+                    <form method="POST" action="/projects/<%= project.id %>/stakeholders/<%= e.id %>/delete" onsubmit="return confirm('Delete this stakeholder?')">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button type="submit" class="btn-danger btn-sm">Del</button>
+                    </form>
+                  </td>
+                <% } %>
+              </tr>
+              <% if (member.role !== 'viewer') { %>
+                <tr class="sh-edit-row" id="edit-row-<%= e.id %>" hidden>
+                  <td colspan="7">
+                    <form method="POST" action="/projects/<%= project.id %>/stakeholders/<%= e.id %>/edit" class="stakeholder-edit-form">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <label>Name <input type="text" name="name" class="form-input sh-edit-name" required></label>
+                      <label>Role <input type="text" name="role" class="form-input sh-edit-role"></label>
+                      <label>Organization <input type="text" name="organization" class="form-input sh-edit-org"></label>
+                      <label>Influence <input type="number" name="influence" min="1" max="5" class="form-input sh-edit-inf"></label>
+                      <label>Interest <input type="number" name="interest" min="1" max="5" class="form-input sh-edit-int"></label>
+                      <div class="inline-actions">
+                        <button type="submit" class="btn-primary btn-sm">Save</button>
+                        <button type="button" class="btn-outline btn-sm sh-cancel-btn" data-id="<%= e.id %>">Cancel</button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              <% } %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } else { %>
+    <div class="empty-state">
+      <p><%= filters.confidence_min ? 'No stakeholders match your filter.' : 'No stakeholders extracted yet.' %></p>
+      <% if (filters.confidence_min) { %><a href="/projects/<%= project.id %>/stakeholders" class="btn-outline">Clear</a><% } %>
+    </div>
+  <% } %>
+</div>
+
+<% if (member.role !== 'viewer') { %>
+<div id="shMergeModal" class="modal-backdrop" hidden>
+  <div class="modal-panel">
+    <h3>Merge Stakeholders</h3>
+    <p id="shMergeDesc" class="muted"></p>
+    <form method="POST" id="shMergeForm">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-row">
+        <label>Keep this stakeholder
+          <select name="keep_id" id="shMergeKeepId" class="form-input" required></select>
+        </label>
+        <label>Discard this stakeholder
+          <select name="discard_id" id="shMergeDiscardId" class="form-input" required></select>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary btn-sm">Merge Stakeholders</button>
+        <button type="button" class="btn-outline btn-sm" id="shMergeSwapBtn">Swap</button>
+        <button type="button" class="btn-outline btn-sm" id="shMergeCancelBtn">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const projectId = '<%= project.id %>';
+  const stakeholderRows = [];
+  const nameMap = {};
+  document.querySelectorAll('tr[data-sh-id]').forEach(function(row){
+    const item = {
+      id: row.dataset.shId,
+      name: row.dataset.shName || '',
+      role: row.dataset.shRole || '',
+      org: row.dataset.shOrg || ''
+    };
+    stakeholderRows.push(item);
+    nameMap[item.id] = item.name;
+  });
+
+  document.querySelectorAll('.sh-edit-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.sh-edit-row').forEach(function(row){ row.hidden = true; });
+      const row = document.getElementById('edit-row-' + btn.dataset.id);
+      if (!row) return;
+      row.querySelector('.sh-edit-name').value = btn.dataset.name || '';
+      row.querySelector('.sh-edit-role').value = btn.dataset.role || '';
+      row.querySelector('.sh-edit-org').value = btn.dataset.org || '';
+      row.querySelector('.sh-edit-inf').value = btn.dataset.inf || '';
+      row.querySelector('.sh-edit-int').value = btn.dataset.int || '';
+      row.hidden = false;
+      row.querySelector('input[name="name"]').focus();
+    });
+  });
+
+  document.querySelectorAll('.sh-cancel-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const row = document.getElementById('edit-row-' + btn.dataset.id);
+      if (row) row.hidden = true;
+    });
+  });
+
+  const modal = document.getElementById('shMergeModal');
+  const mergeForm = document.getElementById('shMergeForm');
+  const mergeDesc = document.getElementById('shMergeDesc');
+  const keepInput = document.getElementById('shMergeKeepId');
+  const discardInput = document.getElementById('shMergeDiscardId');
+
+  function labelFor(s) {
+    const parts = [];
+    if (s.role) parts.push(s.role);
+    if (s.org) parts.push(s.org);
+    return s.name + (parts.length ? ' - ' + parts.join(', ') : '');
+  }
+  function renderOptions() {
+    const html = stakeholderRows.map(function(s){
+      return '<option value="' + escAttr(s.id) + '">' + escHtml(labelFor(s)) + '</option>';
+    }).join('');
+    keepInput.innerHTML = html;
+    discardInput.innerHTML = html;
+  }
+  function ensureOption(select, id) {
+    if (!id || select.querySelector('option[value="' + cssEscape(id) + '"]')) return;
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = nameMap[id] || id;
+    select.appendChild(option);
+  }
+  function updateMergeDesc() {
+    const keepName = nameMap[keepInput.value] || keepInput.value;
+    const discardName = nameMap[discardInput.value] || discardInput.value;
+    if (!keepInput.value || !discardInput.value) {
+      mergeDesc.textContent = 'Choose the stakeholder to keep and the stakeholder to remove.';
+    } else if (keepInput.value === discardInput.value) {
+      mergeDesc.textContent = 'Choose two different stakeholders to merge.';
+    } else {
+      mergeDesc.textContent = 'Keep "' + keepName + '" and remove "' + discardName + '". Blank fields on the kept record will be filled from the removed record.';
+    }
+    mergeForm.action = '/projects/' + projectId + '/stakeholders/' + (keepInput.value || 'manual') + '/merge';
+  }
+  function openMerge(keepId, discardId) {
+    renderOptions();
+    ensureOption(keepInput, keepId);
+    ensureOption(discardInput, discardId);
+    keepInput.value = keepId || (stakeholderRows[0] && stakeholderRows[0].id) || '';
+    discardInput.value = discardId || (stakeholderRows[1] && stakeholderRows[1].id) || '';
+    if (keepInput.value === discardInput.value && stakeholderRows.length > 1) {
+      const other = stakeholderRows.find(function(s){ return s.id !== keepInput.value; });
+      if (other) discardInput.value = other.id;
+    }
+    updateMergeDesc();
+    modal.hidden = false;
+  }
+
+  const manualMergeBtn = document.getElementById('manualMergeBtn');
+  if (manualMergeBtn) manualMergeBtn.addEventListener('click', function(){ openMerge(); });
+  document.querySelectorAll('.duplicate-review-merge-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      openMerge(btn.dataset.id, btn.dataset.candidate);
+    });
+  });
+  document.querySelectorAll('.sh-merge-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const candidates = (btn.dataset.candidates || '').split(',').filter(Boolean);
+      openMerge(btn.dataset.id, candidates[0]);
+    });
+  });
+  keepInput.addEventListener('change', updateMergeDesc);
+  discardInput.addEventListener('change', updateMergeDesc);
+  document.getElementById('shMergeSwapBtn').addEventListener('click', function(){
+    const tmp = keepInput.value;
+    keepInput.value = discardInput.value;
+    discardInput.value = tmp;
+    updateMergeDesc();
+  });
+  document.getElementById('shMergeCancelBtn').addEventListener('click', function(){ modal.hidden = true; });
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.hidden = true; });
+  mergeForm.addEventListener('submit', function(e){
+    if (!keepInput.value || !discardInput.value || keepInput.value === discardInput.value) {
+      e.preventDefault();
+      updateMergeDesc();
+    }
+  });
+
+  const regenBtn = document.getElementById('regenBtn');
+  if (regenBtn) {
+    regenBtn.addEventListener('click', function(){
+      if (!confirm('Re-extract all completed sources using the latest AI prompt? This will update all entity types including stakeholders.')) return;
+      const btn = this;
+      btn.disabled = true;
+      window.tiqFetchJson('/projects/' + projectId + '/sources/done-ids')
+        .then(function(data){
+          const ids = data.source_ids || [];
+          if (!ids.length) throw new Error('No extracted sources found for this project.');
+          let i = 0;
+          function extractSource(id, label) {
+            const init = new FormData();
+            init.append('phase', 'init');
+            return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: init })
+              .then(function(meta){
+                if (!meta.ok) throw new Error(meta.error || 'Extraction initialization failed.');
+                const total = meta.chunks_total || 0;
+                function chunk(idx, attempt) {
+                  if (idx >= total) return Promise.resolve();
+                  btn.textContent = label + ' section ' + (idx + 1) + '/' + total + '...';
+                  const f = new FormData();
+                  f.append('phase', 'chunk');
+                  f.append('chunk_idx', String(idx));
+                  f.append('retry_attempt', String(attempt || 0));
+                  return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: f })
+                    .then(function(res){
+                      if (!res.ok) {
+                        if ((attempt || 0) < 2) return chunk(idx, (attempt || 0) + 1);
+                        throw new Error(res.error || 'Extraction failed on section ' + (idx + 1) + '.');
+                      }
+                      return chunk(idx + 1, 0);
+                    });
+                }
+                return chunk(0, 0);
+              });
+          }
+          function next() {
+            if (i >= ids.length) {
+              btn.textContent = 'Done - reloading...';
+              setTimeout(function(){ window.location.reload(); }, 800);
+              return;
+            }
+            btn.textContent = 'Extracting ' + (i + 1) + '/' + ids.length + '...';
+            extractSource(ids[i], 'Extracting ' + (i + 1) + '/' + ids.length).then(function(){ i++; next(); });
+          }
+          next();
+        })
+        .catch(function(err){
+          alert(err.message || 'Extraction failed.');
+          btn.disabled = false;
+          btn.textContent = '↺ Regenerate';
+        });
+    });
+  }
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function escAttr(s) {
+    return escHtml(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function cssEscape(s) {
+    if (window.CSS && window.CSS.escape) return window.CSS.escape(s);
+    return String(s || '').replace(/"/g, '\\"');
+  }
+})();
+</script>
+<% } %>

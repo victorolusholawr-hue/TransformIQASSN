@@ -1,3 +1,40 @@
-<% const type='systems', label='Systems', icon='🖥️', color='blue', showStatusFilter=false; %>
-<% const statusOptions='[]'.replace('[','').replace(']','').split(',').filter(Boolean); %>
-<%- include('_list', { type, label, icon, color, entities, project, member, filters, showStatusFilter, statusOptions, csrfToken }) %>
+<div class="container-wide">
+  <div class="page-header">
+    <div>
+      <h1>Systems &amp; Applications <span class="count-badge"><%= entities.length %></span></h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <a href="/projects/<%= project.id %>" class="btn-outline">Back to Project</a>
+  </div>
+
+  <% if (!entities.length) { %>
+    <div class="card empty-state"><p>No systems extracted yet.</p></div>
+  <% } else { %>
+    <div class="section">
+      <div class="table-wrap">
+        <table class="students-table entity-table">
+          <thead><tr><th>Name</th><th>Type</th><th>Description</th><th>Integrations</th><th>Confidence</th><th></th></tr></thead>
+          <tbody>
+            <% for (const e of entities) { const conf = Number(e.confidence || 0.7); const integrations = Array.isArray(e.integrations) ? e.integrations : []; %>
+              <tr>
+                <td class="cell-title"><a href="/projects/<%= project.id %>/systems/<%= e.id %>"><%= e.name %></a></td>
+                <td><span class="badge-info"><%= e.system_type || 'existing' %></span></td>
+                <td class="cell-meta"><%= e.description ? e.description.slice(0, 100) + (e.description.length > 100 ? '...' : '') : '—' %></td>
+                <td class="cell-meta"><%= integrations.length ? integrations.join(', ') : '—' %></td>
+                <td><span class="confidence-badge <%= conf >= 0.8 ? 'confidence-badge-high' : conf >= 0.5 ? 'confidence-badge-med' : 'confidence-badge-low' %>"><%= Math.round(conf * 100) %>%</span></td>
+                <td>
+                  <% if (member.role !== 'viewer') { %>
+                    <form method="POST" action="/projects/<%= project.id %>/systems/<%= e.id %>/delete" onsubmit="return confirm('Delete this system?')">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn-danger btn-sm">Del</button>
+                    </form>
+                  <% } %>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</div>

@@ -1,3 +1,63 @@
-<% const type='decisions', label='Decisions', icon='✅', color='amber', showStatusFilter=true; %>
-<% const statusOptions='[proposed,approved,deferred,rejected]'.replace('[','').replace(']','').split(',').filter(Boolean); %>
-<%- include('_list', { type, label, icon, color, entities, project, member, filters, showStatusFilter, statusOptions, csrfToken }) %>
+<div class="container-wide">
+  <div class="page-header">
+    <div>
+      <h1>Decisions <span class="count-badge"><%= entities.length %></span></h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <a href="/projects/<%= project.id %>" class="btn-outline">Back to Project</a>
+  </div>
+
+  <form method="GET" class="filter-bar">
+    <label>Status:</label>
+    <select name="status" class="form-input filter-input" onchange="this.form.submit()">
+      <option value="">All Statuses</option>
+      <% for (const status of ['proposed','approved','deferred','rejected']) { %>
+        <option value="<%= status %>" <%= filters.status === status ? 'selected' : '' %>><%= status.charAt(0).toUpperCase() + status.slice(1) %></option>
+      <% } %>
+    </select>
+    <span class="filter-sep"></span>
+    <label>Min confidence:</label>
+    <input type="range" name="confidence_min" min="0" max="1" step="0.1"
+      value="<%= filters.confidence_min || '0' %>"
+      oninput="document.getElementById('confVal').textContent=parseFloat(this.value).toFixed(1)"
+      onchange="this.form.submit()">
+    <span class="filter-confidence-val" id="confVal"><%= Number(filters.confidence_min || 0).toFixed(1) %></span>
+    <% if (filters.status || filters.confidence_min) { %><a href="/projects/<%= project.id %>/decisions" class="btn-outline btn-sm">Clear</a><% } %>
+  </form>
+
+  <% if (!entities.length) { %>
+    <div class="card empty-state">
+      <p><%= (filters.status || filters.confidence_min) ? 'No decisions match your filter.' : 'No decisions extracted yet.' %></p>
+    </div>
+  <% } else { %>
+    <div class="section">
+      <div class="table-wrap">
+        <table class="students-table entity-table">
+          <thead><tr><th>Title</th><th>Decision Maker</th><th>Status</th><th>Confidence</th><th></th></tr></thead>
+          <tbody>
+            <% for (const e of entities) { const conf = Number(e.confidence || 0.7); %>
+              <tr>
+                <td>
+                  <div class="cell-title"><a href="/projects/<%= project.id %>/decisions/<%= e.id %>"><%= e.title %></a></div>
+                  <% if (e.description) { %><div class="cell-meta"><%= e.description.slice(0, 100) %><%= e.description.length > 100 ? '...' : '' %></div><% } %>
+                  <% if (e.rationale) { %><div class="cell-meta"><em>Rationale: <%= e.rationale.slice(0, 80) %><%= e.rationale.length > 80 ? '...' : '' %></em></div><% } %>
+                </td>
+                <td class="cell-meta"><%= e.decision_maker || '—' %></td>
+                <td><span class="<%= e.status === 'approved' ? 'badge-success' : e.status === 'rejected' ? 'badge-danger' : e.status === 'deferred' ? 'badge-warning' : 'badge-muted' %>"><%= e.status || 'proposed' %></span></td>
+                <td><span class="confidence-badge <%= conf >= 0.8 ? 'confidence-badge-high' : conf >= 0.5 ? 'confidence-badge-med' : 'confidence-badge-low' %>"><%= Math.round(conf * 100) %>%</span></td>
+                <td>
+                  <% if (member.role !== 'viewer') { %>
+                    <form method="POST" action="/projects/<%= project.id %>/decisions/<%= e.id %>/delete" onsubmit="return confirm('Delete this decision?')">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn-danger btn-sm">Del</button>
+                    </form>
+                  <% } %>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</div>

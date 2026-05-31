@@ -5,16 +5,24 @@ const { v4: uuidv4 } = require('uuid');
 const { getPool, sql } = require('../config/database');
 const router   = express.Router();
 
+function safeNextPath(value) {
+  const next = String(value || '').trim();
+  if (!next || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return '/dashboard';
+  return next;
+}
+
 router.get('/login', (req, res) => {
-  if (req.session.userId) return res.redirect('/dashboard');
-  res.render('auth/login', { title: 'Login' });
+  const next = safeNextPath(req.query.next);
+  if (req.session.userId) return res.redirect(next);
+  res.render('auth/login', { title: 'Login', next });
 });
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
+  const next = safeNextPath(req.body.next);
   if (!email || !password) {
     req.flash('error', 'Email and password are required.');
-    return res.redirect('/login');
+    return res.redirect(`/login?next=${encodeURIComponent(next)}`);
   }
   try {
     const pool   = await getPool();
@@ -25,21 +33,21 @@ router.post('/login', async (req, res) => {
     const user = result.recordset[0];
     if (!user || !user.password_hash) {
       req.flash('error', 'Invalid email or password.');
-      return res.redirect('/login');
+      return res.redirect(`/login?next=${encodeURIComponent(next)}`);
     }
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
       req.flash('error', 'Invalid email or password.');
-      return res.redirect('/login');
+      return res.redirect(`/login?next=${encodeURIComponent(next)}`);
     }
     req.session.userId = user.id;
     req.session.name   = user.name;
     req.session.role   = user.role;
-    res.redirect('/dashboard');
+    res.redirect(next);
   } catch (err) {
     console.error('[auth/login]', err);
     req.flash('error', 'Server error. Please try again.');
-    res.redirect('/login');
+    res.redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 });
 

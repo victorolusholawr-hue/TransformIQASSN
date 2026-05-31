@@ -1,38 +1,72 @@
-<div class="container">
+<div class="container-wide">
   <div class="page-header">
-    <h1>Process Map</h1>
+    <div>
+      <h1>Process Maps</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
     <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
   </div>
 
-  <% if (!processes.length) { %>
-    <div class="empty-state"><p>No processes extracted yet.</p></div>
-  <% } else { %>
-    <div class="side-layout">
-      <div class="side-panel">
-        <h3 class="side-panel-title">Processes</h3>
+  <div class="process-map-layout">
+    <aside class="card process-map-list">
+      <h3>Processes</h3>
+      <% if (processes.length) { %>
         <% for (const p of processes) { %>
-          <a href="?process_id=<%= p.id %>" class="side-item <%= selected && selected.id === p.id ? 'active' : '' %>">
-            <%= p.name %>
-          </a>
+          <a href="/projects/<%= project.id %>/visualize/process-map?process_id=<%= p.id %>" class="process-map-link <%= selected && selected.id === p.id ? 'active' : '' %>"><%= p.name %></a>
         <% } %>
-      </div>
-      <div class="side-main">
-        <% if (selected) { %>
-          <h2><%= selected.name %></h2>
-          <% if (selected.description) { %><p><%= selected.description %></p><% } %>
-          <% if (selected.mermaid_syntax) { %>
-            <div class="mermaid-wrap">
-              <div class="mermaid"><%= selected.mermaid_syntax %></div>
-            </div>
-          <% } else { %>
-            <p class="muted">No diagram syntax for this process.</p>
-          <% } %>
-        <% } else { %>
-          <div class="empty-state"><p>Select a process from the left to view its diagram.</p></div>
-        <% } %>
-      </div>
-    </div>
-  <% } %>
+      <% } else { %>
+        <p class="muted">No processes extracted.</p>
+      <% } %>
+    </aside>
+
+    <main>
+      <% if (selected) { %>
+        <div class="section">
+          <div class="section-header"><h3><%= selected.name %></h3></div>
+          <div class="section-body">
+            <% if (selected.description) { %><p class="muted" style="margin-bottom:16px;"><%= selected.description %></p><% } %>
+            <% if (selected.mermaid_syntax) { %>
+              <div class="mermaid-container">
+                <div class="mermaid" id="mermaid-diagram"><%= selected.mermaid_syntax %></div>
+              </div>
+            <% } else { %>
+              <p class="muted">No diagram generated for this process.</p>
+            <% } %>
+
+            <% if (selected.steps && selected.steps.length) { %>
+              <div class="process-steps">
+                <h3>Process Steps</h3>
+                <ol>
+                  <% selected.steps.slice().sort((a,b)=>Number(a.order||0)-Number(b.order||0)).forEach(function(step){ %>
+                    <li><strong><%= step.actor || '?' %></strong>: <%= step.action || '' %></li>
+                  <% }) %>
+                </ol>
+              </div>
+            <% } %>
+
+            <% if (selected.source_quote) { %>
+              <div class="source-quote"><%= selected.source_quote %></div>
+            <% } %>
+          </div>
+        </div>
+      <% } else { %>
+        <div class="empty-state"><p>Select a process from the list or extract processes from a source first.</p></div>
+      <% } %>
+    </main>
+  </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<script>mermaid.initialize({startOnLoad:true,theme:'default'});</script>
+<script>
+if (window.mermaid) {
+  mermaid.initialize({ startOnLoad: true, theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'default', securityLevel: 'strict' });
+  mermaid.parseError = function(err) {
+    const el = document.getElementById('mermaid-diagram');
+    if (el) {
+      el.textContent = 'Diagram syntax error: ' + err;
+      el.style.color = 'var(--danger)';
+      el.style.fontSize = '0.85rem';
+    }
+  };
+}
+</script>

@@ -15,7 +15,7 @@ router.get('/projects/:projectId/graph/data', loginRequired, projectAccessRequir
   res.json({ elements });
 });
 
-router.get('/projects/:projectId/traceability', loginRequired, projectAccessRequired, async (req, res) => {
+async function renderTraceability(req, res) {
   try {
     const pool = await getPool();
     const pid  = req.params.projectId;
@@ -41,6 +41,10 @@ router.get('/projects/:projectId/traceability', loginRequired, projectAccessRequ
     req.flash('error', 'Failed to load traceability matrix.');
     res.redirect(`/projects/${req.params.projectId}`);
   }
-});
+}
+
+router.get('/projects/:projectId/traceability', loginRequired, projectAccessRequired, renderTraceability);
+router.get('/projects/:projectId/graph/traceability', loginRequired, projectAccessRequired, renderTraceability);
+router.get('/projects/:projectId/graph/matrix', loginRequired, projectAccessRequired, renderTraceability);
 
 module.exports = router;

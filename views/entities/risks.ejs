@@ -1,3 +1,70 @@
-<% const type='risks', label='Risks', icon='⚠️', color='red', showStatusFilter=false; %>
-<% const statusOptions='[]'.replace('[','').replace(']','').split(',').filter(Boolean); %>
-<%- include('_list', { type, label, icon, color, entities, project, member, filters, showStatusFilter, statusOptions, csrfToken }) %>
+<div class="container-wide">
+  <div class="page-header">
+    <div>
+      <h1>Risk Register <span class="count-badge"><%= entities.length %></span></h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <div class="header-actions">
+      <a href="/projects/<%= project.id %>/visualize/risk-heatmap" class="btn-outline">Risk Heatmap</a>
+      <% if (member.role !== 'viewer') { %>
+        <form method="POST" action="/projects/<%= project.id %>/export/risk-register">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn-outline">Export to Excel</button>
+        </form>
+      <% } %>
+      <a href="/projects/<%= project.id %>" class="btn-outline">Back to Project</a>
+    </div>
+  </div>
+
+  <% if (!entities.length) { %>
+    <div class="card empty-state">
+      <p><%= filters.confidence_min ? 'No risks match your filter.' : 'No risks extracted yet.' %></p>
+      <% if (filters.confidence_min) { %><a href="/projects/<%= project.id %>/risks" class="btn-outline">Clear</a><% } %>
+    </div>
+  <% } else { %>
+    <div class="section">
+      <form method="GET" class="filter-bar entity-filter-bar">
+        <label>Min confidence:</label>
+        <input type="range" name="confidence_min" min="0" max="1" step="0.1"
+          value="<%= filters.confidence_min || '0' %>"
+          oninput="document.getElementById('confVal').textContent=parseFloat(this.value).toFixed(1)"
+          onchange="this.form.submit()">
+        <span class="filter-confidence-val" id="confVal"><%= Number(filters.confidence_min || 0).toFixed(1) %></span>
+        <% if (filters.confidence_min) { %><a href="/projects/<%= project.id %>/risks" class="btn-outline btn-sm">Clear</a><% } %>
+      </form>
+
+      <div class="table-wrap">
+        <table class="students-table entity-table">
+          <thead>
+            <tr><th>Title</th><th>Category</th><th>Likelihood</th><th>Impact</th><th>Score</th><th>Owner</th><th>Confidence</th><th></th></tr>
+          </thead>
+          <tbody>
+            <% for (const e of entities) { const conf = Number(e.confidence || 0.7); const likelihood = Number(e.likelihood || 1); const impact = Number(e.impact || 1); const score = likelihood * impact; %>
+              <tr>
+                <td>
+                  <div class="cell-title"><a href="/projects/<%= project.id %>/risks/<%= e.id %>"><%= e.title %></a></div>
+                  <% if (e.description) { %><div class="cell-meta"><%= e.description.slice(0, 80) %><%= e.description.length > 80 ? '...' : '' %></div><% } %>
+                  <% if (e.source_quote) { %><div class="source-quote entity-table-quote"><%= e.source_quote %></div><% } %>
+                </td>
+                <td><span class="badge-muted"><%= e.category || '—' %></span></td>
+                <td style="text-align:center;"><%= likelihood %>/5</td>
+                <td style="text-align:center;"><%= impact %>/5</td>
+                <td style="text-align:center;"><span class="<%= score >= 16 ? 'badge-danger' : score >= 9 ? 'badge-warning' : 'badge-success' %>"><%= score %></span></td>
+                <td class="cell-meta"><%= e.owner || '—' %></td>
+                <td><span class="confidence-badge <%= conf >= 0.8 ? 'confidence-badge-high' : conf >= 0.5 ? 'confidence-badge-med' : 'confidence-badge-low' %>"><%= Math.round(conf * 100) %>%</span></td>
+                <td>
+                  <% if (member.role !== 'viewer') { %>
+                    <form method="POST" action="/projects/<%= project.id %>/risks/<%= e.id %>/delete" onsubmit="return confirm('Delete this risk?')">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn-danger btn-sm">Del</button>
+                    </form>
+                  <% } %>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } %>
+</div>

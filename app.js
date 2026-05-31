@@ -11,6 +11,7 @@ const morgan  = require('morgan');
 
 const { initDb }      = require('./db/init');
 const csrfMiddleware  = require('./middleware/csrf');
+const MssqlSessionStore = require('./services/mssqlSessionStore');
 
 // ── Routes ──────────────────────────────────────────────────
 const authRoutes       = require('./routes/auth');
@@ -54,16 +55,24 @@ app.use(express.json({ limit: '100mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Session ──────────────────────────────────────────────────
-app.use(session({
+const sessionMaxAge = 7 * 24 * 60 * 60 * 1000;
+const sessionOptions = {
   secret:            process.env.SESSION_SECRET || 'dev-secret-change-me',
   resave:            false,
   saveUninitialized: false,
+  rolling:           true,
   cookie: {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge:   7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge:   sessionMaxAge,
   },
+};
+if (process.env.SESSION_STORE !== 'memory') {
+  sessionOptions.store = new MssqlSessionStore({ ttlMs: sessionMaxAge });
+}
+app.use(session({
+  ...sessionOptions,
 }));
 
 // ── Flash messages ───────────────────────────────────────────

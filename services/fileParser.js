@@ -119,31 +119,43 @@ async function parseImage(filePath) {
  * Returns extracted text string.
  */
 async function parseImageWithVision(imageUrl) {
-  const Anthropic = require('@anthropic-ai/sdk');
-  const c         = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
+  const { callClaude, ANTHROPIC_MODEL } = require('./ai');
 
   let imageSource;
   if (imageUrl.startsWith('http')) {
     imageSource = { type: 'url', url: imageUrl };
   } else {
-    const buf    = fs.readFileSync(imageUrl);
+    const localPath = imageUrl.startsWith('/')
+      ? path.join(__dirname, '..', 'public', imageUrl.replace(/^\//, ''))
+      : imageUrl;
+    const buf    = fs.readFileSync(localPath);
     const b64    = buf.toString('base64');
-    const ext    = path.extname(imageUrl).toLowerCase().replace('.', '');
+    const ext    = path.extname(localPath).toLowerCase().replace('.', '');
     const mt     = ext === 'jpg' ? 'jpeg' : ext;
     imageSource  = { type: 'base64', media_type: `image/${mt}`, data: b64 };
   }
 
-  const response = await c.messages.create({
-    model:      'claude-sonnet-4-6',
-    max_tokens: 4096,
-    messages: [{
+  const response = await callClaude(
+    [{
       role: 'user',
       content: [
         { type: 'image', source: imageSource },
-        { type: 'text', text: 'Please transcribe all text visible in this image. Return only the transcribed text.' },
+        {
+          type: 'text',
+          text: (
+            'Extract all content from this image for business analysis. ' +
+            'Transcribe any visible text in full. For diagrams, flowcharts, or process maps: ' +
+            'describe each step, decision point, and relationship in structured prose. ' +
+            'For tables or data: reproduce the structure and all values. ' +
+            'For org charts: list all roles and reporting relationships. ' +
+            'Output only the extracted content with no commentary.'
+          ),
+        },
       ],
     }],
-  });
+    `You are a precise image transcription and business-analysis assistant. Use the configured Claude model ${ANTHROPIC_MODEL}.`,
+    4096
+  );
   return response.content[0].text || '';
 }
 

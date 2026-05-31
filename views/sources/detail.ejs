@@ -111,6 +111,7 @@
   const toastTitle = document.getElementById('aiToastTitle');
   const toastSub = document.getElementById('aiToastSub');
   const closeBtn = document.getElementById('aiToastClose');
+  const MAX_CHUNK_RETRIES = 2;
   let autoHideTimer = null;
   let originalBtnText = 'Extract with AI';
 
@@ -151,12 +152,12 @@
           onError(data.error || 'Initialization failed.');
           return;
         }
-        processChunk(0, data.chunks_total, data.redirect_url, 0, 0);
+        processChunk(0, data.chunks_total, data.redirect_url, 0, 0, 0);
       })
       .catch(function(err){ onError(err.message || 'Network error during initialization.'); });
   }
 
-  function processChunk(idx, total, redirectUrl, totalInserted, totalFlagged) {
+  function processChunk(idx, total, redirectUrl, totalInserted, totalFlagged, attempt) {
     if (!total) {
       onError('No extractable text sections were found.');
       return;
@@ -165,10 +166,11 @@
     const f = new FormData();
     f.append('phase', 'chunk');
     f.append('chunk_idx', String(idx));
+    f.append('retry_attempt', String(attempt || 0));
     window.tiqFetchJson(extractUrl, { method: 'POST', body: f })
       .then(function(data){
         if (!data.ok) {
-          onError(data.error || 'Failed on section ' + (idx + 1) + '.');
+          retryOrFail(idx, total, redirectUrl, totalInserted, totalFlagged, attempt, data.error || 'Failed on section ' + (idx + 1) + '.');
           return;
         }
         const inserted = totalInserted + (data.inserted || 0);
@@ -179,10 +181,23 @@
           showToast('success', 'Extraction complete', msg, 5000);
           setTimeout(function(){ window.location.href = data.redirect_url || redirectUrl || '/projects/<%= source.project_id %>'; }, 1200);
         } else {
-          processChunk(idx + 1, total, redirectUrl, inserted, flagged);
+          processChunk(idx + 1, total, redirectUrl, inserted, flagged, 0);
         }
       })
-      .catch(function(err){ onError(err.message || 'Network error on section ' + (idx + 1) + '.'); });
+      .catch(function(err){
+        retryOrFail(idx, total, redirectUrl, totalInserted, totalFlagged, attempt, err.message || 'Network error on section ' + (idx + 1) + '.');
+      });
+  }
+
+  function retryOrFail(idx, total, redirectUrl, totalInserted, totalFlagged, attempt, msg) {
+    if (attempt < MAX_CHUNK_RETRIES) {
+      showToast('analyzing', 'Retrying section ' + (idx + 1), msg);
+      setTimeout(function(){
+        processChunk(idx, total, redirectUrl, totalInserted, totalFlagged, attempt + 1);
+      }, 800 * (attempt + 1));
+      return;
+    }
+    onError(msg);
   }
 
   function onError(msg) {
@@ -192,7 +207,7 @@
       btn.textContent = originalBtnText;
     }
     showToast('error', 'Extraction failed', msg);
-    setTimeout(function(){ window.location.reload(); }, 1400);
+    setTimeout(function(){ window.location.reload(); }, 2500);
   }
 
   document.querySelectorAll('.extract-form').forEach(function(form){

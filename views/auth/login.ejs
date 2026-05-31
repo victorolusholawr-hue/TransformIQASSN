@@ -12,6 +12,7 @@
 
     <form method="POST" action="/login" class="auth-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="next" value="<%= typeof next !== 'undefined' ? next : '/dashboard' %>">
 
       <div class="form-group">
         <label class="form-label">Email</label>
