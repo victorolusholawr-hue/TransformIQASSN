@@ -11,7 +11,7 @@ Port of the original TransformIQ Python/Flask/MongoDB app into Node.js/Express/E
 - **Backend:** Node.js 20, Express 4.19, EJS 3.1 via `express-ejs-layouts`
 - **Database:** SQL Server 2022 (Docker); `mssql` npm package (Tedious driver); **all queries parameterised** — `request.input(name, type, value)`
 - **Auth:** `bcryptjs` local login; sessions via `express-session`; CSRF via custom `middleware/csrf.js`
-- **AI:** `@anthropic-ai/sdk` (`claude-sonnet-4-6`); prompt caching on system messages
+- **AI:** `@anthropic-ai/sdk`; model configurable via `ANTHROPIC_MODEL` env var (default `claude-sonnet-4-6`); prompt caching on system messages
 - **File parsing:** `pdf-parse`, `mammoth` (docx), `xlsx`, `tesseract.js` (images/OCR)
 - **Export generation:** `docx` (Word), `exceljs` (Excel), `puppeteer` (PDF)
 - **File storage:** Azure Blob Storage (production); local `public/uploads/` (dev, when `AZURE_STORAGE_CONNECTION_STRING` is blank)
@@ -76,6 +76,7 @@ TransformIQ_Association/
 │   ├── graphBuilder.js       # buildGraphEdges() — infers relationships, inserts into GraphEdges
 │   └── exportBuilder.js      # buildBrd(), buildFrd(), buildRiskRegister(), buildExecutiveSummary(), buildFutureState()
 ├── public/
+│   ├── favicon.svg           # SVG favicon — white "T" on rounded #72246c square; linked in layout.ejs
 │   ├── css/style.css         # All styles — CSS variables, Association purple #72246c
 │   └── uploads/              # Local dev file storage (gitignored)
 │       ├── sources/
@@ -84,8 +85,10 @@ TransformIQ_Association/
     ├── layout.ejs            # Navbar, flash, dark mode toggle, page-body wrapper
     ├── error.ejs             # 404/500 error page
     ├── partials/
-    │   ├── navbar.ejs        # Brand nav, theme toggle, user info
-    │   └── flash.ejs         # Flash message partials
+    │   ├── navbar.ejs        # Brand nav, theme toggle (event-listener, no inline onclick), user info
+    │   ├── flash.ejs         # Flash message partials
+    │   ├── insights_nav.ejs  # Tab bar shared by all insights pages
+    │   └── insights_toast.ejs # AI generation toast (spinner/success/error); included on every insight page
     ├── auth/                 # login.ejs, register.ejs
     ├── dashboard/            # home.ejs — pipeline hero + project cards
     ├── admin/                # usage.ejs — token stats + rate limit settings
@@ -99,6 +102,8 @@ TransformIQ_Association/
     │                         # gap_analysis.ejs, risk_heatmap.ejs
     ├── insights/             # future_state.ejs, roadmap.ejs, user_stories.ejs,
     │                         # acceptance_criteria.ejs, impact_matrix.ejs, voice_capture.ejs
+    │                         # All insight pages include insights_toast.ejs and submit generate
+    │                         # forms via AJAX (window.tiqFetchJson) — no full-page reload on generate
     └── export/               # index.ejs, executive_summary_pdf.ejs
 ```
 
@@ -248,7 +253,7 @@ Entity type URL slugs: `requirements`, `stakeholders`, `processes`, `decisions`,
 
 ## AI Service (`services/ai.js`)
 
-- **Model:** `claude-sonnet-4-6`, prompt caching via `cache_control: { type: "ephemeral" }` on system messages
+- **Model:** configurable via `ANTHROPIC_MODEL` env var (default `claude-sonnet-4-6`); prompt caching via `cache_control: { type: "ephemeral" }` on system messages
 - **`extractChunk(text, projectId, chunkIdx, totalChunks)`** — sends a 6,000-char chunk with the 8-entity extraction system prompt; returns structured JSON of all entities found
 - **`callClaudeStructured(systemPrompt, userPrompt, maxTokens)`** — for insight generation (future state, roadmap, etc.)
 - **`logUsage(projectId, userId, inputTokens, outputTokens)`** — writes to `dbo.UsageStats` (UPSERT) and `dbo.RateEvents`
@@ -318,15 +323,56 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 - `.card` / `.entity-card` / `.entity-grid` — content cards
 - `.form-group` / `.form-label` / `.form-input` / `.form-actions` — form building blocks
 - `.section` / `.section-header` — bordered content blocks
-- `.page-header` / `.header-actions` / `.page-sub` — page title area
+- `.page-header` / `.header-actions` / `.page-sub` — page title area with optional subtitle link
 - `.projects-grid` — auto-fill card grid for project list
-- `.project-card` / `.project-card-header` / `.project-card-name` / `.project-card-desc` / `.project-card-meta` — dashboard project cards
+- `.project-card` / `.project-card-header` / `.project-card-name` / `.project-card-desc` / `.project-card-meta` / `.project-card-actions` — dashboard project cards (actions row: Open + Upload Source buttons)
 - `.pipeline-hero` / `.pipeline-steps` / `.pipeline-step` / `.step-num` / `.step-label` / `.pipeline-arrow` — dashboard hero
 - `.members-list` / `.member-item` / `.member-avatar` / `.member-info` / `.member-name` / `.member-email` — team member rows
 - `.students-table` — data tables (reused from LMS)
 - `.empty-state` — centered empty content placeholder
 - `.flash` / `.flash-success` / `.flash-error` / `.flash-warning` — flash messages
 - `.pill` / `.confidence-pill` — inline status chips on entity lists
+
+**Insights component classes:**
+- `.insight-section` — bordered section card on insight detail pages
+- `.insight-grid` — responsive auto-fill grid for insight cards
+- `.insight-card` — individual insight item card (key transformation, scenario, etc.)
+- `.insight-narrative` — full-width paragraph block for narrative/overview text
+- `.insight-list` — styled `<ul>` for bullet items in insight sections
+- `.insight-value-tag` — small tinted pill for business value labels
+- `.insight-generated-at` — muted timestamp line below page header
+- `.insight-generate-form` — class required on every generate `<form>` for the toast AJAX handler to pick it up
+
+**Roadmap component classes:**
+- `.roadmap-summary-bar` — overall progress bar row above phases
+- `.roadmap-overall-bar` / `.roadmap-overall-fill` — overall progress track + fill
+- `.roadmap-overall-pct` / `.roadmap-total-estimate` — counter and total duration labels
+- `.roadmap-rationale` — phasing rationale text block
+- `.roadmap-phases` — container for all phase cards
+- `.roadmap-phase` — individual phase card
+- `.roadmap-phase-header` — flex row: phase number chip + name + duration
+- `.roadmap-phase-num` — circle chip; colour variants `.phase-color-0` through `.phase-color-3`
+- `.roadmap-phase-name` / `.roadmap-phase-duration` — phase identity text
+- `.roadmap-phase-body` — content area: objective, progress, task list
+- `.roadmap-phase-progress-wrap` / `.roadmap-phase-progress-bar` / `.roadmap-phase-progress-fill` — per-phase progress
+- `.roadmap-task-list` / `.roadmap-task-item` — task rows within a phase
+- `.roadmap-task-title` / `.roadmap-task-controls` — task item internals
+
+**AI Toast component classes (in `insights_toast.ejs`):**
+- `.ai-toast` — fixed-position toast container; hidden by default
+- `.ai-toast-visible` — makes toast visible (added/removed by JS)
+- `.ai-toast-analyzing` / `.ai-toast-success` / `.ai-toast-error` — state variants
+- `.ai-toast-icon` / `.ai-toast-spinner` / `.ai-toast-body` / `.ai-toast-close` — internals
+
+**Voice capture component classes:**
+- `.voice-page` — wrapper for the voice capture page
+- `.voice-browser-warn` — browser-incompatibility warning banner
+- `.voice-speaker-panel` — card containing speaker management UI
+- `.voice-speaker-header` / `.voice-speaker-form` — speaker panel internals
+- `.speaker-chip-row` — flex row of speaker chips
+- `.speaker-chip` / `.speaker-chip.active` — individual speaker selection chips
+- `.voice-controls` / `.rec-btn` / `.rec-btn-start` / `.rec-btn-pause` / `.rec-btn-stop` — recording controls
+- `.rec-meta` / `.speaker-label` — meta row below recording buttons
 
 **Responsive breakpoints:**
 - `≤768px` — hamburger nav, stacked layout
@@ -345,6 +391,7 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 | `DB_USER` | Yes | SQL Server user (default `sa`) |
 | `DB_PASSWORD` | Yes | SQL Server password |
 | `ANTHROPIC_API_KEY` | For AI features | Claude API key (`sk-ant-...`) |
+| `ANTHROPIC_MODEL` | No | Claude model ID (default `claude-sonnet-4-6`) |
 | `AZURE_STORAGE_CONNECTION_STRING` | Production only | Leave blank to use local disk |
 | `AZURE_STORAGE_CONTAINER` | Production only | Blob container name |
 
@@ -364,7 +411,15 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 - Node colours match `.ec-*` brand colours
 
 ### AI Insights
-Each insight type is generated by `callClaudeStructured()` with the full entity dataset as context. Results stored in `dbo.AIInsights` with UNIQUE(project_id, type) — regenerating overwrites the previous result. Six insight types: future-state, roadmap, user-stories, acceptance-criteria, impact-matrix, voice-capture.
+Each insight type is generated by `callClaudeStructured()` with the full entity dataset as context — `hasEntities()` + `entityLines()` helpers in `routes/insights.js` build entity-aware prompts. Results stored in `dbo.AIInsights` with UNIQUE(project_id, type) — regenerating overwrites the previous result. Six insight types: future-state, roadmap, user-stories, acceptance-criteria, impact-matrix, voice-capture.
+
+**Async generation flow:** All insight pages submit the generate form via `window.tiqFetchJson` (AJAX). The `insights_toast.ejs` partial shows a spinner while waiting, then a success/error toast on completion. POST routes must return `{ ok: true }` JSON on success (or `{ ok: false, error: "..." }` on failure) — they no longer redirect on success.
+
+**Future State** includes a rich layout: Vision Overview, Key Transformations, Scenarios with optional Mermaid process diagrams, Benefits, and Risks sections. Supports "Export as Word" (calls `POST /export/future-state` → `buildFutureState()` in `exportBuilder.js`).
+
+**Roadmap** includes per-phase and overall progress bars, owner datalist (populated from stakeholder names), inline task status select, and a phasing rationale block. Task updates go via `POST /roadmap/update-task` AJAX.
+
+**Voice Capture** has a speaker panel (add/select speakers as chips), three coloured recording buttons (green mic, orange pause, red stop), filter profanity checkbox, New Turn button, and session-persistent transcript area.
 
 ### Rate Limiting
 `isRateLimited(userId, projectId, action)` counts `RateEvents` rows in the last 60 minutes. Limits stored per action in `dbo.AppSettings` (configurable by admins at `/admin/usage`).
@@ -374,7 +429,7 @@ Five export types generated by `services/exportBuilder.js`:
 - **BRD / FRD** — Word .docx via `docx` npm
 - **Risk Register** — Excel .xlsx via `exceljs`
 - **Executive Summary** — PDF via `puppeteer` (renders `executive_summary_pdf.ejs` to PDF)
-- **Future State** — Word .docx
+- **Future State** — Word .docx; triggered from the Future State insight page via "Export as Word" button
 
 Generated files saved via `config/storage.saveBuffer()` and a record inserted into `dbo.Documents`.
 
@@ -382,8 +437,9 @@ Generated files saved via `config/storage.saveBuffer()` and a record inserted in
 Three-tier access: `owner` (full control + delete), `analyst` (upload/extract/edit), `viewer` (read-only). `projectAccessRequired` middleware enforces membership on every project route. `analystRequired` blocks viewers from write operations.
 
 ### Dark Mode
-- Toggle button (`🌙/☀`) in navbar — `type="button"`, calls `toggleTheme()` in `layout.ejs`
-- Preference persisted to `localStorage`
+- Toggle button (`🌙/☀`) in navbar — `type="button"`, `class="theme-btn btn-icon"`, **no inline `onclick`**
+- `setTheme(theme)` function defined inside a `DOMContentLoaded` listener in `layout.ejs`; button clicks are wired via `addEventListener` — do NOT add `onclick="toggleTheme()"` to the button markup (that function no longer exists globally)
+- Preference persisted to `localStorage`; `aria-label` updated dynamically on toggle
 - System `prefers-color-scheme` used as default on first visit
 - Applied via `data-theme="dark"` on `<html>` by inline script in `<head>` (before body renders to prevent flash)
 
@@ -416,3 +472,4 @@ docker compose up --build -d
 - No real-time extraction progress WebSocket — polling via `/projects/:id/sources/done-ids` JSON endpoint
 - No audit log for entity edits
 - Roadmap task drag-and-drop not implemented (use reorder AJAX endpoints)
+- Insight generation toast relies on `window.tiqFetchJson`; if that helper is missing the form falls back to a normal POST (no toast, full reload)
