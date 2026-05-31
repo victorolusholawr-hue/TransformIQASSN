@@ -1,32 +1,49 @@
 <div class="container">
-  <%- include('../partials/insights_nav') %>
   <div class="page-header" style="margin-top:20px;">
-    <h1>User Stories</h1>
+    <div>
+      <h1>User Stories</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
     <% if (member.role !== 'viewer') { %>
-      <form method="POST" action="/projects/<%= project.id %>/user-stories">
+      <form method="POST" action="/projects/<%= project.id %>/user-stories" class="insight-generate-form">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %></button>
+        <button type="submit" class="btn-primary"><%= insight ? 'Re-generate' : 'Generate User Stories' %></button>
       </form>
     <% } %>
   </div>
-  <% if (!insight) { %>
-    <div class="empty-state"><p>Generate user stories with AI.</p></div>
-  <% } else { const c = insight.content; %>
-    <% if (c.personas) { %>
-      <% for (const p of c.personas) { %>
-        <div class="section">
-          <div class="section-header"><h3><%= p.name %> — <em><%= p.role %></em></h3></div>
-          <% for (const s of (p.stories || [])) { %>
-            <div class="story-card">
-              <p><strong>As a</strong> <%= s.as_a %>, <strong>I want</strong> <%= s.i_want %>, <strong>so that</strong> <%= s.so_that %></p>
-              <% if (s.acceptance_criteria && s.acceptance_criteria.length) { %>
-                <ul class="ac-list"><% for (const ac of s.acceptance_criteria) { %><li><%= ac %></li><% } %></ul>
-              <% } %>
-              <% if (s.priority) { %><span class="badge-<%= s.priority==='high'?'danger':s.priority==='medium'?'warning':'muted' %>"><%= s.priority %></span><% } %>
+
+  <%- include('../partials/insights_toast') %>
+  <%- include('../partials/insights_nav') %>
+
+  <% if (insight) { const data = insight.content || {}; const stories = data.stories || (data.personas || []).flatMap(p => (p.stories || []).map(s => ({ requirement_title: p.name, story: `As a ${s.as_a}, I want ${s.i_want}, so that ${s.so_that}.`, acceptance_criteria: s.acceptance_criteria, priority: s.priority }))); %>
+    <p class="insight-generated-at">Generated <%= new Date(insight.generated_at).toISOString().slice(0,16).replace('T',' ') %> UTC - re-run after adding new sources to refresh.</p>
+    <% if (stories.length) { %>
+      <p class="muted"><%= stories.length %> user stor<%= stories.length === 1 ? 'y' : 'ies' %> generated from extracted requirements.</p>
+      <% stories.forEach(function(s, idx) { %>
+        <div class="story-card">
+          <div class="story-card-header">
+            <span class="muted"><%= idx + 1 %>.</span>
+            <span><%= s.requirement_title %></span>
+            <span class="badge-<%= s.priority === 'high' ? 'danger' : s.priority === 'medium' ? 'warning' : 'muted' %>"><%= s.priority || 'medium' %></span>
+            <% if (s.story_points) { %><span class="story-points-badge"><%= s.story_points %> pts</span><% } %>
+          </div>
+          <p class="story-text"><%= s.story %></p>
+          <% if (s.acceptance_criteria && s.acceptance_criteria.length) { %>
+            <div class="story-criteria-wrap">
+              <p class="section-kicker">Acceptance Criteria</p>
+              <ul class="story-criteria"><% for (const ac of s.acceptance_criteria) { %><li><%= ac %></li><% } %></ul>
             </div>
           <% } %>
         </div>
-      <% } %>
+      <% }); %>
+    <% } else { %>
+      <div class="card empty-state"><p>No stories could be generated. Check that requirements have been extracted.</p></div>
     <% } %>
+  <% } else { %>
+    <div class="insight-empty">
+      <p class="insight-empty-icon">◇</p>
+      <h3>No user stories yet</h3>
+      <p>Click <strong>Generate User Stories</strong> to convert your extracted requirements into Agile user stories with acceptance criteria.</p>
+    </div>
   <% } %>
 </div>

@@ -1,0 +1,59 @@
+<div class="ai-toast" id="insightToast">
+  <div class="ai-toast-icon" id="insightToastIcon"></div>
+  <div class="ai-toast-body">
+    <strong id="insightToastTitle"></strong>
+    <span id="insightToastSub"></span>
+  </div>
+  <button type="button" class="ai-toast-close" id="insightToastClose" aria-label="Dismiss">×</button>
+</div>
+
+<script>
+(function () {
+  const toast = document.getElementById('insightToast');
+  const toastIcon = document.getElementById('insightToastIcon');
+  const toastTitle = document.getElementById('insightToastTitle');
+  const toastSub = document.getElementById('insightToastSub');
+  const closeBtn = document.getElementById('insightToastClose');
+  let autoHideTimer = null;
+
+  function showToast(state, title, sub, autoDismissMs) {
+    toast.className = 'ai-toast ai-toast-' + state + ' ai-toast-visible';
+    toastIcon.innerHTML = state === 'analyzing' ? '<span class="ai-toast-spinner"></span>' : state === 'success' ? '✓' : '✕';
+    toastTitle.textContent = title;
+    toastSub.textContent = sub || '';
+    clearTimeout(autoHideTimer);
+    if (autoDismissMs) {
+      autoHideTimer = setTimeout(function () { toast.classList.remove('ai-toast-visible'); }, autoDismissMs);
+    }
+  }
+
+  closeBtn.addEventListener('click', function () {
+    clearTimeout(autoHideTimer);
+    toast.classList.remove('ai-toast-visible');
+  });
+
+  document.querySelectorAll('.insight-generate-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]');
+      const originalText = btn ? btn.textContent : '';
+      if (btn) btn.disabled = true;
+      showToast('analyzing', 'Generating insight...', 'AI is analysing your entities. You can keep working on this page.');
+      window.tiqFetchJson(form.action, { method: 'POST', body: new FormData(form) })
+        .then(function (data) {
+          if (data && data.ok) {
+            showToast('success', 'Generation complete', 'Reloading results...', 5000);
+            setTimeout(function () { window.location.reload(); }, 1200);
+            return;
+          }
+          if (btn) { btn.disabled = false; btn.textContent = originalText; }
+          showToast('error', 'Generation failed', (data && data.error) || 'AI generation did not complete. Please try again.');
+        })
+        .catch(function (err) {
+          if (btn) { btn.disabled = false; btn.textContent = originalText; }
+          showToast('error', 'Generation failed', err.message || 'Check your connection and try again.');
+        });
+    });
+  });
+})();
+</script>

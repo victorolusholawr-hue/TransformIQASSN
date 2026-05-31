@@ -69,25 +69,28 @@
 <%- typeof script !== 'undefined' ? script : '' %>
 
 <script>
-function toggleTheme(){
-  try {
-    const h    = document.documentElement;
-    const next = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    h.setAttribute('data-theme', next);
-    document.querySelectorAll('.theme-btn').forEach(function(btn){
-      btn.textContent = next === 'dark' ? '☀️' : '🌙';
-      btn.title = next === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
-    });
-    try { localStorage.setItem('theme', next); } catch(_) {}
-  } catch(e) { console.warn('[theme] toggle error', e); }
-}
-// Sync button icon on load
 document.addEventListener('DOMContentLoaded', function(){
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  document.querySelectorAll('.theme-btn').forEach(function(btn){
-    btn.textContent = isDark ? '☀️' : '🌙';
-    btn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+  const root = document.documentElement;
+  const buttons = document.querySelectorAll('.theme-btn');
+
+  function setTheme(theme) {
+    const next = theme === 'dark' ? 'dark' : 'light';
+    root.setAttribute('data-theme', next);
+    buttons.forEach(function(btn) {
+      const isDark = next === 'dark';
+      btn.textContent = isDark ? '☀️' : '🌙';
+      btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+      btn.setAttribute('aria-label', btn.title);
+    });
+    try { localStorage.setItem('theme', next); } catch (_) {}
+  }
+
+  buttons.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
   });
+  setTheme(root.getAttribute('data-theme') || 'light');
 });
 </script>
 </body>

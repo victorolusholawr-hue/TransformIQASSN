@@ -2,7 +2,46 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { getPool, sql } = require('../config/database');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
+const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
+const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
+const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+function createAiConfigError(message) {
+  const err = new Error(message);
+  err.code = 'AI_CONFIGURATION';
+  return err;
+}
+
+function assertAiConfigured() {
+  if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === 'sk-ant-...' || ANTHROPIC_API_KEY.length < 20) {
+    throw createAiConfigError('Anthropic API key is missing or still set to the placeholder value. Update ANTHROPIC_API_KEY in .env and restart the app.');
+  }
+  if (!ANTHROPIC_MODEL) {
+    throw createAiConfigError('Anthropic model is missing. Set ANTHROPIC_MODEL in .env or use the default model.');
+  }
+}
+
+function normaliseAiError(err) {
+  if (err && err.code === 'AI_CONFIGURATION') return err;
+
+  const status = err && (err.status || err.statusCode);
+  const rawMessage = err && err.message ? err.message : 'AI request failed.';
+  const message = String(rawMessage);
+
+  if (status === 401 || /api key|authentication|unauthorized/i.test(message)) {
+    return createAiConfigError('Anthropic rejected the API key. Check ANTHROPIC_API_KEY in .env and restart the app.');
+  }
+  if (status === 404 || /model.*not.*found|not_found_error|invalid model/i.test(message)) {
+    return createAiConfigError(`Anthropic model "${ANTHROPIC_MODEL}" is not available for this API key. Set ANTHROPIC_MODEL in .env to an enabled Claude model and restart the app.`);
+  }
+  if (status === 429 || /rate limit|quota|credit/i.test(message)) {
+    const rateErr = new Error('Anthropic rate limit or quota was reached. Try again later or check account billing/limits.');
+    rateErr.code = 'AI_RATE_LIMIT';
+    return rateErr;
+  }
+  return err;
+}
 
 // ── Extraction system prompt (mirrors TransformIQ Python SYSTEM_PROMPT) ──────
 const EXTRACTION_SYSTEM_PROMPT = `You are an expert Business Analyst AI. Extract structured entities from the provided source text.
@@ -58,19 +97,24 @@ const CHUNK_SIZE = 6000;
  * Call Claude with optional prompt caching on the system prompt.
  */
 async function callClaude(messages, systemPrompt, maxTokens = 4096) {
-  const response = await client.messages.create({
-    model:      'claude-sonnet-4-6',
-    max_tokens: maxTokens,
-    system: [
-      {
-        type: 'text',
-        text: systemPrompt,
-        cache_control: { type: 'ephemeral' },
-      },
-    ],
-    messages,
-  });
-  return response;
+  assertAiConfigured();
+  try {
+    const response = await client.messages.create({
+      model:      ANTHROPIC_MODEL,
+      max_tokens: maxTokens,
+      system: [
+        {
+          type: 'text',
+          text: systemPrompt,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages,
+    });
+    return response;
+  } catch (err) {
+    throw normaliseAiError(err);
+  }
 }
 
 /**

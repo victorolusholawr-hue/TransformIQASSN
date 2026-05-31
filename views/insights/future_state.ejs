@@ -1,43 +1,188 @@
 <div class="container">
-  <%- include('../partials/insights_nav') %>
-
   <div class="page-header" style="margin-top:20px;">
-    <h1>Future State</h1>
-    <% if (member.role !== 'viewer') { %>
-      <form method="POST" action="/projects/<%= project.id %>/future-state">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %></button>
-      </form>
-    <% } %>
+    <div>
+      <h1>Future State Scenarios</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <div class="header-actions">
+      <% if (member.role !== 'viewer') { %>
+        <form method="POST" action="/projects/<%= project.id %>/future-state" class="insight-generate-form">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-primary"><%= insight ? 'Re-generate' : 'Generate Future State' %></button>
+        </form>
+      <% } %>
+      <% if (insight) { %>
+        <form method="POST" action="/projects/<%= project.id %>/export/future-state">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-outline">Export as Word</button>
+        </form>
+      <% } %>
+    </div>
   </div>
 
-  <% if (!insight) { %>
-    <div class="empty-state"><p>Generate a future state analysis with AI.</p></div>
-  <% } else { const c = insight.content; %>
-    <div class="card" style="margin-bottom:16px;">
-      <h3>Narrative</h3>
-      <p><%= c.narrative %></p>
-    </div>
-    <% if (c.scenarios && c.scenarios.length) { %>
-      <div class="section">
-        <div class="section-header"><h3>Scenarios</h3></div>
-        <% for (const s of c.scenarios) { %>
-          <div class="card" style="margin-bottom:12px;">
-            <h4><%= s.title %></h4>
-            <p><%= s.description %></p>
-            <% if (s.mermaid_syntax) { %><div class="mermaid"><%= s.mermaid_syntax %></div><% } %>
+  <%- include('../partials/insights_toast') %>
+  <%- include('../partials/insights_nav') %>
+
+  <% if (insight) { const data = insight.content || {}; const processMaps = data.process_maps || (data.scenarios || []).map(s => ({ process_name: s.title, mermaid: s.mermaid_syntax })).filter(pm => pm.mermaid); %>
+    <p class="insight-generated-at">Generated <%= new Date(insight.generated_at).toISOString().slice(0,16).replace('T',' ') %> UTC - re-run after adding new sources to refresh.</p>
+
+    <% if (data.overview || data.narrative) { %>
+      <section class="insight-section">
+        <h2>Vision Overview</h2>
+        <p class="insight-narrative"><%= data.overview || data.narrative %></p>
+      </section>
+    <% } %>
+
+    <% if (data.key_transformations && data.key_transformations.length) { %>
+      <section class="insight-section">
+        <h2>Key Transformations</h2>
+        <div class="insight-grid">
+          <% for (const t of data.key_transformations) { %>
+            <div class="insight-card">
+              <h4><%= t.title %></h4>
+              <p><%= t.description %></p>
+              <% if (t.business_value) { %><div class="insight-value-tag"><%= t.business_value %></div><% } %>
+            </div>
+          <% } %>
+        </div>
+      </section>
+    <% } else if (data.key_changes && data.key_changes.length) { %>
+      <section class="insight-section">
+        <h2>Key Transformations</h2>
+        <ul class="insight-list"><% for (const k of data.key_changes) { %><li><%= k %></li><% } %></ul>
+      </section>
+    <% } %>
+
+    <% if (data.process_changes && data.process_changes.length) { %>
+      <section class="insight-section">
+        <h2>Process Changes</h2>
+        <% for (const pc of data.process_changes) { %>
+          <div class="insight-change-card">
+            <h4><%= pc.process_name %></h4>
+            <div class="insight-change-grid">
+              <div class="insight-change-col insight-current"><span class="insight-change-label">Current State</span><p><%= pc.current_state %></p></div>
+              <div class="insight-change-arrow">→</div>
+              <div class="insight-change-col insight-future"><span class="insight-change-label">Future State</span><p><%= pc.future_state %></p></div>
+            </div>
+            <% if (pc.key_changes && pc.key_changes.length) { %>
+              <ul class="insight-change-list"><% for (const ch of pc.key_changes) { %><li><%= ch %></li><% } %></ul>
+            <% } %>
           </div>
         <% } %>
-      </div>
+      </section>
     <% } %>
-    <% if (c.key_changes && c.key_changes.length) { %>
-      <div class="section"><div class="section-header"><h3>Key Changes</h3></div>
-        <ul class="reco-list"><% for (const k of c.key_changes) { %><li><%= k %></li><% } %></ul>
-      </div>
+
+    <% if (data.system_changes && data.system_changes.length) { %>
+      <section class="insight-section">
+        <h2>System Changes</h2>
+        <table class="trace-table">
+          <thead><tr><th>System</th><th>Change Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <% for (const sc of data.system_changes) { %>
+              <tr><td><strong><%= sc.system_name %></strong></td><td><span class="badge-muted"><%= sc.change_type %></span></td><td><%= sc.description %></td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </section>
     <% } %>
+
+    <% if (processMaps.length) { %>
+      <section class="insight-section">
+        <h2>Future State Process Maps</h2>
+        <p class="muted">Click any diagram to expand it. Edit the Mermaid source below each diagram and re-render when needed.</p>
+        <% for (const pm of processMaps) { %>
+          <div class="process-map-wrap">
+            <div class="process-map-title">
+              <span><%= pm.process_name %></span>
+              <div class="process-map-actions">
+                <button type="button" class="btn-outline btn-sm pm-zoom-btn" data-title="<%= pm.process_name %>">Zoom</button>
+                <button type="button" class="btn-outline btn-sm pm-svg-export-btn" data-title="<%= pm.process_name %>">SVG</button>
+              </div>
+            </div>
+            <div class="process-map-diagram pm-diagram-area"><div class="mermaid pm-mermaid-render"><%= pm.mermaid %></div></div>
+            <div class="process-map-editor">
+              <label class="form-label">Edit Mermaid source</label>
+              <textarea class="form-input mermaid-edit-area pm-source-textarea" rows="5"><%= pm.mermaid %></textarea>
+              <button type="button" class="btn-outline btn-sm pm-rerender-btn">Re-render</button>
+            </div>
+          </div>
+        <% } %>
+      </section>
+    <% } %>
+
+    <% if ((data.critical_success_factors && data.critical_success_factors.length) || (data.recommended_next_steps && data.recommended_next_steps.length) || (data.success_factors && data.success_factors.length)) { %>
+      <section class="insight-section insight-two-col">
+        <div>
+          <h2>Critical Success Factors</h2>
+          <ul class="insight-list"><% for (const f of (data.critical_success_factors || data.success_factors || [])) { %><li><%= f %></li><% } %></ul>
+        </div>
+        <div>
+          <h2>Recommended Next Steps</h2>
+          <ul class="insight-list"><% for (const s of (data.recommended_next_steps || [])) { %><li><%= s %></li><% } %></ul>
+        </div>
+      </section>
+    <% } %>
+  <% } else { %>
+    <div class="insight-empty">
+      <p class="insight-empty-icon">◇</p>
+      <h3>No future state yet</h3>
+      <p>Click <strong>Generate Future State</strong> to create a future-state vision from extracted entities.</p>
+    </div>
   <% } %>
 </div>
-<% if (insight && insight.content && insight.content.scenarios) { %>
+
+<div id="pmZoomOverlay">
+  <div id="pmZoomBox">
+    <button type="button" id="pmZoomClose" title="Close">×</button>
+    <div id="pmZoomTitle"></div>
+    <div class="pm-zoom-controls">
+      <button type="button" class="btn-outline btn-sm" id="pmZoomIn">Zoom In</button>
+      <button type="button" class="btn-outline btn-sm" id="pmZoomOut">Zoom Out</button>
+      <button type="button" class="btn-outline btn-sm" id="pmZoomReset">Reset</button>
+    </div>
+    <div id="pmZoomContent"></div>
+  </div>
+</div>
+
+<% if (insight) { %>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<script>mermaid.initialize({startOnLoad:true});</script>
+<script>
+(function(){
+  mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' });
+  let zoomScale = 1;
+  const overlay = document.getElementById('pmZoomOverlay');
+  const zoomContent = document.getElementById('pmZoomContent');
+  const zoomTitle = document.getElementById('pmZoomTitle');
+  function rerender(area) {
+    const source = area.closest('.process-map-wrap').querySelector('.pm-source-textarea').value;
+    const target = area.closest('.process-map-wrap').querySelector('.pm-diagram-area');
+    target.innerHTML = '<div class="mermaid pm-mermaid-render">' + source.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+    mermaid.run({ nodes: [target.querySelector('.mermaid')] });
+  }
+  document.querySelectorAll('.pm-rerender-btn').forEach(btn => btn.addEventListener('click', function(){ rerender(btn); }));
+  document.querySelectorAll('.pm-zoom-btn').forEach(btn => btn.addEventListener('click', function(){
+    const svg = btn.closest('.process-map-wrap').querySelector('.pm-diagram-area svg');
+    if (!svg) return;
+    zoomScale = 1;
+    zoomTitle.textContent = btn.dataset.title || '';
+    zoomContent.innerHTML = svg.outerHTML;
+    zoomContent.firstElementChild.style.transformOrigin = 'top left';
+    overlay.classList.add('open');
+  }));
+  document.querySelectorAll('.pm-svg-export-btn').forEach(btn => btn.addEventListener('click', function(){
+    const svg = btn.closest('.process-map-wrap').querySelector('.pm-diagram-area svg');
+    if (!svg) return;
+    const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (btn.dataset.title || 'diagram').replace(/[^a-z0-9_-]/gi, '_') + '.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }));
+  document.getElementById('pmZoomClose').addEventListener('click', function(){ overlay.classList.remove('open'); });
+  document.getElementById('pmZoomIn').addEventListener('click', function(){ zoomScale += 0.2; zoomContent.firstElementChild.style.transform = 'scale(' + zoomScale + ')'; });
+  document.getElementById('pmZoomOut').addEventListener('click', function(){ zoomScale = Math.max(0.4, zoomScale - 0.2); zoomContent.firstElementChild.style.transform = 'scale(' + zoomScale + ')'; });
+  document.getElementById('pmZoomReset').addEventListener('click', function(){ zoomScale = 1; zoomContent.firstElementChild.style.transform = 'scale(1)'; });
+})();
+</script>
 <% } %>

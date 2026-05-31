@@ -28,8 +28,8 @@
             <a href="/sources/<%= s.id %>" class="source-item-name"><%= s.name %></a>
             <div class="source-item-meta">
               <% if (s.source_type) { %><span class="badge-info"><%= s.source_type %></span><% } %>
-              <span class="<%= s.ai_status === 'done' ? 'badge-success' : s.ai_status === 'processing' ? 'badge-warning' : 'badge-muted' %>">
-                <%= s.ai_status === 'done' ? '✓ Extracted' : s.ai_status === 'processing' ? '⟳ Processing' : 'Pending' %>
+              <span class="<%= s.ai_status === 'done' ? 'badge-success' : s.ai_status === 'processing' ? 'badge-warning' : s.ai_status === 'failed' ? 'badge-danger' : 'badge-muted' %>">
+                <%= s.ai_status === 'done' ? '✓ Extracted' : s.ai_status === 'processing' ? '⟳ Processing' : s.ai_status === 'failed' ? 'Failed' : 'Pending' %>
               </span>
               <span class="source-date"><%= new Date(s.created_at).toLocaleDateString() %></span>
             </div>
@@ -39,8 +39,14 @@
             <% if (s.ai_status !== 'done' && s.extraction_status === 'done') { %>
               <form method="POST" action="/sources/<%= s.id %>/extract" style="display:inline;">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <button type="submit" class="btn-sm btn-primary">Extract AI</button>
+                <button type="submit" class="btn-sm btn-primary"><%= s.ai_status === 'failed' || s.ai_status === 'processing' ? 'Retry AI' : 'Extract AI' %></button>
               </form>
+              <% if (s.ai_status === 'processing') { %>
+                <form method="POST" action="/sources/<%= s.id %>/reset-ai" style="display:inline;">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button type="submit" class="btn-sm btn-outline">Reset</button>
+                </form>
+              <% } %>
             <% } %>
             <form method="POST" action="/sources/<%= s.id %>/delete" style="display:inline;">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">

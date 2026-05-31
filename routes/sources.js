@@ -34,6 +34,31 @@ async function loadSourceAccess(pool, projectId, userId) {
   return project;
 }
 
+function safeExtractionError(err) {
+  const message = err && err.message ? String(err.message) : 'AI extraction failed. Please try again.';
+  return message.slice(0, 500);
+}
+
+async function markSourceAiStatus(pool, sourceId, status, errorMessage) {
+  const existing = await pool.request()
+    .input('id', sql.UniqueIdentifier, sourceId)
+    .query('SELECT metadata FROM dbo.Sources WHERE id=@id');
+  let metadata = {};
+  try { metadata = JSON.parse((existing.recordset[0] && existing.recordset[0].metadata) || '{}'); } catch (_) {}
+
+  if (status === 'failed' && errorMessage) {
+    metadata.ai_error = safeExtractionError({ message: errorMessage });
+  } else if (status === 'processing' || status === 'done' || status === 'pending') {
+    delete metadata.ai_error;
+  }
+
+  await pool.request()
+    .input('id', sql.UniqueIdentifier, sourceId)
+    .input('status', sql.NVarChar, status)
+    .input('meta', sql.NVarChar, JSON.stringify(metadata))
+    .query('UPDATE dbo.Sources SET ai_status=@status, metadata=@meta WHERE id=@id');
+}
+
 const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads', 'sources');
 const storage    = multer.diskStorage({
   destination: (_, __, cb) => cb(null, UPLOAD_DIR),
@@ -199,8 +224,8 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
       await pool.request()
         .input('id', sql.UniqueIdentifier, req.params.id)
         .input('n',  sql.Int, chunksTotal)
-        .query("UPDATE dbo.Sources SET ai_status='processing', chunks_total=@n WHERE id=@id");
-      return res.json({ ok: true, chunks_total: chunksTotal });
+        .query('UPDATE dbo.Sources SET chunks_total=@n WHERE id=@id');
+      return res.json({ ok: true, chunks_total: chunksTotal, redirect_url: `/projects/${source.project_id}` });
     }
 
     if (phase === 'chunk') {
@@ -209,10 +234,12 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
       const chunksTotal = Math.ceil(text.length / chunkSize);
       const chunkText = text.slice(chunkIdx * chunkSize, (chunkIdx + 1) * chunkSize);
       if (!chunkText) {
+        await markSourceAiStatus(pool, req.params.id, 'failed', 'Invalid extraction section.');
         return res.json({ ok: false, error: 'Invalid extraction section.' });
       }
 
       if (chunkIdx === 0) {
+        await markSourceAiStatus(pool, req.params.id, 'processing');
         for (const t of ['Requirements','Stakeholders','Processes','Decisions','Risks','BusinessRules','Systems','KPIs']) {
           await pool.request()
             .input('sid', sql.UniqueIdentifier, req.params.id)
@@ -226,8 +253,7 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
       if (done) {
         await buildGraphEdges(source.project_id);
         await logUsage(source.project_id, req.session.userId, 0, 0, 'extract');
-        await pool.request().input('id', sql.UniqueIdentifier, req.params.id)
-          .query("UPDATE dbo.Sources SET ai_status='done' WHERE id=@id");
+        await markSourceAiStatus(pool, req.params.id, 'done');
       }
       return res.json({
         ok: true,
@@ -239,8 +265,7 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
     }
 
     // Sync / single shot
-    await pool.request().input('id', sql.UniqueIdentifier, req.params.id)
-      .query("UPDATE dbo.Sources SET ai_status='processing' WHERE id=@id");
+    await markSourceAiStatus(pool, req.params.id, 'processing');
 
     // Delete stale entities for this source
     for (const t of ['Requirements','Stakeholders','Processes','Decisions','Risks','BusinessRules','Systems','KPIs']) {
@@ -254,22 +279,43 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
     await buildGraphEdges(source.project_id);
     await logUsage(source.project_id, req.session.userId, 0, 0, 'extract');
 
-    await pool.request().input('id', sql.UniqueIdentifier, req.params.id)
-      .query("UPDATE dbo.Sources SET ai_status='done' WHERE id=@id");
+    await markSourceAiStatus(pool, req.params.id, 'done');
 
     if (wantsJson(req)) return res.json({ ok: true, done: true, redirect_url: `/projects/${source.project_id}` });
     req.flash('success', 'Entities extracted successfully.');
     res.redirect(`/projects/${source.project_id}`);
   } catch (err) {
     console.error('[sources/extract]', err);
+    const errorMessage = safeExtractionError(err);
     try {
       const p2 = await getPool();
-      await p2.request()
-        .input('id', sql.UniqueIdentifier, req.params.id)
-        .query("UPDATE dbo.Sources SET ai_status='failed' WHERE id=@id");
+      await markSourceAiStatus(p2, req.params.id, 'failed', errorMessage);
     } catch (_) {}
-    if (wantsJson(req)) return res.json({ ok: false, error: err.message });
-    req.flash('error', 'Extraction failed. Please try again.');
+    if (wantsJson(req)) return res.json({ ok: false, error: errorMessage });
+    req.flash('error', errorMessage);
+    res.redirect(`/sources/${req.params.id}`);
+  }
+});
+
+router.post('/sources/:id/reset-ai', analystRequired, async (req, res) => {
+  try {
+    const pool = await getPool();
+    const result = await pool.request()
+      .input('id', sql.UniqueIdentifier, req.params.id)
+      .query('SELECT project_id FROM dbo.Sources WHERE id=@id');
+    const source = result.recordset[0];
+    if (!source) return res.redirect('/dashboard');
+    const project = await loadSourceAccess(pool, source.project_id, req.session.userId);
+    if (!project) {
+      req.flash('error', 'Access denied.');
+      return res.redirect('/dashboard');
+    }
+    await markSourceAiStatus(pool, req.params.id, 'pending');
+    req.flash('success', 'AI extraction status reset. You can retry extraction now.');
+    res.redirect(`/sources/${req.params.id}`);
+  } catch (err) {
+    console.error('[sources/reset-ai]', err);
+    req.flash('error', 'Could not reset extraction status.');
     res.redirect(`/sources/${req.params.id}`);
   }
 });

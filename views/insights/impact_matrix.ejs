@@ -1,37 +1,52 @@
-<div class="container">
-  <%- include('../partials/insights_nav') %>
+<div class="container container-wide">
   <div class="page-header" style="margin-top:20px;">
-    <h1>Impact Matrix</h1>
+    <div>
+      <h1>Change Impact Matrix</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
     <% if (member.role !== 'viewer') { %>
-      <form method="POST" action="/projects/<%= project.id %>/impact-matrix">
+      <form method="POST" action="/projects/<%= project.id %>/impact-matrix" class="insight-generate-form">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %></button>
+        <button type="submit" class="btn-primary"><%= insight ? 'Re-generate' : 'Generate Impact Matrix' %></button>
       </form>
     <% } %>
   </div>
-  <% if (!insight) { %>
-    <div class="empty-state"><p>Generate a change impact matrix with AI.</p></div>
-  <% } else { const c = insight.content; %>
-    <% if (c.impacts && c.impacts.length) { %>
-      <div class="impact-list">
-        <% for (const i of c.impacts) { %>
-          <div class="impact-item card" style="margin-bottom:12px;">
-            <div class="impact-header">
-              <strong><%= i.change %></strong>
-              <span class="badge-<%= i.impact_level==='high'?'danger':i.impact_level==='medium'?'warning':'muted' %>"><%= i.impact_level %></span>
-            </div>
-            <p style="margin-top:6px;"><%= i.description %></p>
-            <div class="impact-meta">
-              <% if (i.affected_departments && i.affected_departments.length) { %>
-                <span class="muted">Departments: <%= i.affected_departments.join(', ') %></span>
-              <% } %>
-              <% if (i.affected_systems && i.affected_systems.length) { %>
-                <span class="muted">Systems: <%= i.affected_systems.join(', ') %></span>
-              <% } %>
-            </div>
-          </div>
-        <% } %>
+
+  <%- include('../partials/insights_toast') %>
+  <%- include('../partials/insights_nav') %>
+
+  <% if (insight) { const data = insight.content || {}; const matrix = data.matrix || (data.impacts || []).map(i => ({ requirement_title: i.change, change_type: 'change', effort_level: i.impact_level, impacted_stakeholders: i.affected_departments, impacted_systems: i.affected_systems, impacted_processes: [], change_description: i.description })); %>
+    <p class="insight-generated-at">Generated <%= new Date(insight.generated_at).toISOString().slice(0,16).replace('T',' ') %> UTC - re-run after adding new sources to refresh.</p>
+    <% if (matrix.length) { %>
+      <p class="muted"><%= matrix.length %> requirement<%= matrix.length === 1 ? '' : 's' %> mapped across stakeholders, systems, and processes.</p>
+      <div class="impact-table-wrap">
+        <table class="impact-table">
+          <thead>
+            <tr><th>Requirement</th><th>Change Type</th><th>Effort</th><th>Impacted Stakeholders</th><th>Impacted Systems</th><th>Impacted Processes</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <% for (const row of matrix) { %>
+              <tr>
+                <td><strong><%= row.requirement_title %></strong></td>
+                <td><% if (row.change_type) { %><span class="badge-muted"><%= row.change_type %></span><% } %></td>
+                <td><span class="effort-<%= row.effort_level || 'medium' %>"><%= row.effort_level || 'medium' %></span></td>
+                <td><% for (const s of (row.impacted_stakeholders || [])) { %><span class="impact-tag"><%= s %></span><% } %></td>
+                <td><% for (const s of (row.impacted_systems || [])) { %><span class="impact-tag"><%= s %></span><% } %></td>
+                <td><% for (const p of (row.impacted_processes || [])) { %><span class="impact-tag"><%= p %></span><% } %></td>
+                <td class="muted"><%= row.change_description %></td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
       </div>
+    <% } else { %>
+      <div class="card empty-state"><p>No impact data could be generated. Check that requirements have been extracted.</p></div>
     <% } %>
+  <% } else { %>
+    <div class="insight-empty">
+      <p class="insight-empty-icon">◇</p>
+      <h3>No impact matrix yet</h3>
+      <p>Click <strong>Generate Impact Matrix</strong> to cross-map each requirement against the stakeholders, systems, and processes it affects.</p>
+    </div>
   <% } %>
 </div>

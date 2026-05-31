@@ -1,47 +1,223 @@
 <div class="container">
-  <%- include('../partials/insights_nav') %>
-
   <div class="page-header" style="margin-top:20px;">
-    <h1>Delivery Roadmap</h1>
+    <div>
+      <h1>Delivery Roadmap</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
     <% if (member.role !== 'viewer') { %>
-      <form method="POST" action="/projects/<%= project.id %>/roadmap">
+      <form method="POST" action="/projects/<%= project.id %>/roadmap" class="insight-generate-form">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %> Roadmap</button>
+        <button type="submit" class="btn-primary"><%= insight ? 'Re-generate' : 'Generate Roadmap' %></button>
       </form>
     <% } %>
   </div>
 
-  <% if (!Object.keys(phases).length) { %>
-    <div class="empty-state"><p>Generate a roadmap to populate tasks, or add tasks manually.</p></div>
-  <% } else { %>
-    <% for (const [phaseName, tasks] of Object.entries(phases)) { %>
-      <div class="phase-block">
-        <div class="phase-header"><h3><%= phaseName %></h3><span class="badge-muted"><%= tasks.length %> tasks</span></div>
-        <div class="task-list">
-          <% for (const task of tasks) { %>
-            <div class="task-item task-status-<%= task.status %>">
-              <div class="task-title"><%= task.req_title %></div>
-              <div class="task-meta">
-                <select class="task-status-select" onchange="updateTask('<%= task.id %>',{status:this.value})">
-                  <% for (const s of ['todo','in_progress','done','blocker','deferred','cancelled']) { %>
-                    <option value="<%= s %>" <%= task.status===s?'selected':'' %>><%= s.replace('_',' ') %></option>
-                  <% } %>
-                </select>
-                <% if (task.owner) { %><span class="badge-muted"><%= task.owner %></span><% } %>
-              </div>
-            </div>
-          <% } %>
-        </div>
+  <%- include('../partials/insights_toast') %>
+  <%- include('../partials/insights_nav') %>
+
+  <datalist id="ownerList">
+    <% for (const name of shNames || []) { %><option value="<%= name %>"><% } %>
+  </datalist>
+
+  <% if (insight) { const data = insight.content || {}; const phases = data.phases || []; let total = 0; let done = 0; for (const phase of phases) { for (const req of (phase.requirements || phase.tasks || [])) { total++; const saved = taskMap[`${phase.name}|||${req.title}`] || {}; if (saved.status === 'done') done++; } } const overallPct = total ? Math.round(done / total * 100) : 0; %>
+    <p class="insight-generated-at">Generated <%= new Date(insight.generated_at).toISOString().slice(0,16).replace('T',' ') %> UTC - re-run after adding new sources to refresh.</p>
+
+    <% if (total > 0) { %>
+      <div class="roadmap-summary-bar">
+        <span class="roadmap-summary-label">Overall progress</span>
+        <div class="roadmap-overall-bar"><div class="roadmap-overall-fill" id="overallFill" style="width:<%= overallPct %>%;"></div></div>
+        <span class="roadmap-overall-pct" id="overallPct"><%= done %>/<%= total %> done</span>
+        <% if (data.total_estimate || data.total_duration) { %><span class="roadmap-total-estimate"><%= data.total_estimate || data.total_duration %></span><% } %>
       </div>
     <% } %>
+
+    <% if (data.phasing_rationale) { %>
+      <div class="insight-section roadmap-rationale"><p><%= data.phasing_rationale %></p></div>
+    <% } %>
+
+    <% if (phases.length) { %>
+      <div class="roadmap-phases" id="roadmapPhases">
+        <% phases.forEach(function(phase, phaseIndex) { const reqs = phase.requirements || phase.tasks || []; let phaseDone = 0; for (const req of reqs) { const saved = taskMap[`${phase.name}|||${req.title}`] || {}; if (saved.status === 'done') phaseDone++; } const phasePct = reqs.length ? Math.round(phaseDone / reqs.length * 100) : 0; %>
+          <div class="roadmap-phase" data-phase="<%= phase.name %>">
+            <div class="roadmap-phase-header">
+              <div class="roadmap-phase-num phase-color-<%= phaseIndex % 4 %>"><%= phaseIndex + 1 %></div>
+              <span class="roadmap-phase-name"><%= phase.name %></span>
+              <% if (phase.duration_estimate || phase.duration) { %><span class="roadmap-phase-duration"><%= phase.duration_estimate || phase.duration %></span><% } %>
+            </div>
+            <div class="roadmap-phase-body">
+              <% if (phase.objective || (phase.objectives && phase.objectives.length)) { %>
+                <p class="muted"><%= phase.objective || phase.objectives.join(', ') %></p>
+              <% } %>
+              <% if (reqs.length) { %>
+                <div class="roadmap-phase-progress-wrap">
+                  <div class="roadmap-phase-progress-label"><span>Tasks</span><span class="phase-pct-label"><%= phaseDone %>/<%= reqs.length %></span></div>
+                  <div class="roadmap-phase-progress-bar"><div class="roadmap-phase-progress-fill" style="width:<%= phasePct %>%;"></div></div>
+                </div>
+                <div class="roadmap-task-list">
+                  <% for (const req of reqs) { const key = `${phase.name}|||${req.title}`; const saved = taskMap[key] || {}; const curStatus = saved.status || 'todo'; const due = saved.due_date ? new Date(saved.due_date).toISOString().slice(0,10) : ''; %>
+                    <div class="roadmap-task-row status-<%= curStatus %>" data-phase="<%= phase.name %>" data-req="<%= req.title %>">
+                      <div class="task-row-top">
+                        <span class="badge-<%= req.priority === 'high' ? 'danger' : req.priority === 'medium' ? 'warning' : 'muted' %>"><%= req.priority || 'medium' %></span>
+                        <span class="task-title <%= curStatus === 'done' ? 'done-title' : '' %>"><%= req.title %></span>
+                        <% if (member.role !== 'viewer') { %>
+                          <select class="task-status-select st-<%= curStatus %>" aria-label="Status">
+                            <% for (const s of ['todo','in_progress','done','blocker','deferred','cancelled']) { %>
+                              <option value="<%= s %>" <%= curStatus === s ? 'selected' : '' %>><%= s.replace('_',' ') %></option>
+                            <% } %>
+                          </select>
+                          <span class="task-save-indicator">Saved</span>
+                          <button type="button" class="btn-outline btn-sm task-move-up" title="Move up">↑</button>
+                          <button type="button" class="btn-outline btn-sm task-move-down" title="Move down">↓</button>
+                          <button type="button" class="btn-danger btn-sm task-delete" title="Delete row">×</button>
+                        <% } else { %>
+                          <span class="badge-muted"><%= curStatus.replace('_',' ') %></span>
+                        <% } %>
+                      </div>
+                      <div class="task-meta-row">
+                        <span class="task-field-label">Owner</span>
+                        <% if (member.role !== 'viewer') { %>
+                          <input type="text" class="task-input task-owner" list="ownerList" placeholder="Assign to..." value="<%= saved.owner || '' %>">
+                          <span class="task-field-label">Due</span>
+                          <input type="date" class="task-input task-due" value="<%= due %>">
+                          <button type="button" class="task-notes-toggle"><%= saved.notes ? 'Notes' : '+ Notes' %></button>
+                        <% } else { %>
+                          <span class="muted"><%= saved.owner || 'Unassigned' %></span>
+                          <% if (due) { %><span class="task-field-label">Due</span><span class="muted"><%= due %></span><% } %>
+                        <% } %>
+                      </div>
+                      <% if (member.role !== 'viewer') { %>
+                        <textarea class="task-notes-area form-input" rows="2" placeholder="Notes, blockers, links..." <%= saved.notes ? '' : 'style="display:none;"' %>><%= saved.notes || '' %></textarea>
+                      <% } else if (saved.notes) { %>
+                        <p class="muted"><%= saved.notes %></p>
+                      <% } %>
+                      <% if (req.rationale || req.description) { %><p class="muted task-rationale"><%= req.rationale || req.description %></p><% } %>
+                    </div>
+                  <% } %>
+                </div>
+              <% } %>
+              <% if ((phase.key_deliverables && phase.key_deliverables.length) || (phase.dependencies && phase.dependencies.length)) { %>
+                <div class="roadmap-phase-extra">
+                  <% if (phase.key_deliverables && phase.key_deliverables.length) { %><div><h4>Key Deliverables</h4><ul><% for (const d of phase.key_deliverables) { %><li><%= d %></li><% } %></ul></div><% } %>
+                  <% if (phase.dependencies && phase.dependencies.length) { %><div><h4>Dependencies</h4><ul><% for (const d of phase.dependencies) { %><li><%= d %></li><% } %></ul></div><% } %>
+                </div>
+              <% } %>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+  <% } else { %>
+    <div class="insight-empty">
+      <p class="insight-empty-icon">◇</p>
+      <h3>No roadmap yet</h3>
+      <p>Click <strong>Generate Roadmap</strong> to have AI group your requirements into logical delivery phases.</p>
+    </div>
   <% } %>
 </div>
+
+<% if (member.role !== 'viewer' && insight) { %>
 <script>
-async function updateTask(id, data) {
-  await fetch('/projects/<%= project.id %>/roadmap/update-task', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ _csrf: '<%= csrfToken %>', task_id: id, ...data }),
+(function () {
+  const UPDATE_URL = '/projects/<%= project.id %>/roadmap/update-task';
+  const DELETE_URL = '/projects/<%= project.id %>/roadmap/delete-task';
+  const REORDER_URL = '/projects/<%= project.id %>/roadmap/reorder-task';
+
+  function debounce(fn, ms) {
+    let t;
+    return function () {
+      const args = arguments;
+      clearTimeout(t);
+      t = setTimeout(function(){ fn.apply(null, args); }, ms);
+    };
+  }
+
+  function payload(row) {
+    return {
+      phase_name: row.dataset.phase,
+      req_title: row.dataset.req,
+      status: row.querySelector('.task-status-select').value,
+      owner: (row.querySelector('.task-owner') || { value: '' }).value,
+      due_date: (row.querySelector('.task-due') || { value: '' }).value,
+      notes: (row.querySelector('.task-notes-area') || { value: '' }).value,
+    };
+  }
+
+  function saveTask(row) {
+    window.tiqFetchJson(UPDATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload(row)),
+    }).then(function () {
+      const ind = row.querySelector('.task-save-indicator');
+      if (ind) { ind.classList.add('visible'); setTimeout(function(){ ind.classList.remove('visible'); }, 1800); }
+    }).catch(function (err) { alert(err.message || 'Could not save roadmap task.'); });
+  }
+
+  function applyStatusStyle(row, status) {
+    row.className = row.className.replace(/\bstatus-\S+/g, '').trim() + ' status-' + status;
+    const sel = row.querySelector('.task-status-select');
+    if (sel) sel.className = sel.className.replace(/\bst-\S+/g, '').trim() + ' st-' + status;
+    const title = row.querySelector('.task-title');
+    if (title) title.classList.toggle('done-title', status === 'done');
+  }
+
+  function recount() {
+    let total = 0;
+    let done = 0;
+    document.querySelectorAll('.roadmap-phase').forEach(function(phaseEl) {
+      const rows = phaseEl.querySelectorAll('.roadmap-task-row');
+      let phaseDone = 0;
+      rows.forEach(function(row) {
+        total++;
+        if (row.querySelector('.task-status-select').value === 'done') { done++; phaseDone++; }
+      });
+      const pct = rows.length ? Math.round(phaseDone / rows.length * 100) : 0;
+      const fill = phaseEl.querySelector('.roadmap-phase-progress-fill');
+      const label = phaseEl.querySelector('.phase-pct-label');
+      if (fill) fill.style.width = pct + '%';
+      if (label) label.textContent = phaseDone + '/' + rows.length;
+    });
+    const overall = total ? Math.round(done / total * 100) : 0;
+    const overallFill = document.getElementById('overallFill');
+    const overallPct = document.getElementById('overallPct');
+    if (overallFill) overallFill.style.width = overall + '%';
+    if (overallPct) overallPct.textContent = done + '/' + total + ' done';
+  }
+
+  const debouncedSave = debounce(saveTask, 500);
+  document.querySelectorAll('.roadmap-task-row').forEach(function(row) {
+    const status = row.querySelector('.task-status-select');
+    if (status) status.addEventListener('change', function() { applyStatusStyle(row, status.value); saveTask(row); recount(); });
+    row.querySelectorAll('.task-owner,.task-due,.task-notes-area').forEach(function(input) {
+      input.addEventListener('input', function(){ debouncedSave(row); });
+      input.addEventListener('change', function(){ saveTask(row); });
+    });
+    const notesToggle = row.querySelector('.task-notes-toggle');
+    if (notesToggle) notesToggle.addEventListener('click', function() {
+      const notes = row.querySelector('.task-notes-area');
+      notes.style.display = notes.style.display === 'none' ? 'block' : 'none';
+      if (notes.style.display !== 'none') notes.focus();
+    });
+    const del = row.querySelector('.task-delete');
+    if (del) del.addEventListener('click', function() {
+      if (!confirm('Remove this row from the roadmap?')) return;
+      window.tiqFetchJson(DELETE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phase_name: row.dataset.phase, req_title: row.dataset.req }),
+      }).then(function(){ row.remove(); recount(); }).catch(function(err){ alert(err.message || 'Could not delete row.'); });
+    });
+    row.querySelectorAll('.task-move-up,.task-move-down').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const direction = btn.classList.contains('task-move-up') ? 'up' : 'down';
+        window.tiqFetchJson(REORDER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phase_name: row.dataset.phase, req_title: row.dataset.req, direction: direction }),
+        }).then(function(){ window.location.reload(); }).catch(function(err){ alert(err.message || 'Could not reorder row.'); });
+      });
+    });
   });
-}
+})();
 </script>
+<% } %>

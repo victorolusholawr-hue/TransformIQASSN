@@ -183,17 +183,64 @@ async function buildFutureState(projectId, projectName, insight) {
     new Paragraph({ text: `Generated: ${new Date().toDateString()}` }),
   ];
 
-  if (insight && insight.narrative) {
-    children.push(new Paragraph({ text: 'Narrative', heading: HeadingLevel.HEADING_1 }));
-    children.push(new Paragraph({ text: insight.narrative }));
+  if (insight && (insight.overview || insight.narrative)) {
+    children.push(new Paragraph({ text: 'Vision Overview', heading: HeadingLevel.HEADING_1 }));
+    children.push(new Paragraph({ text: insight.overview || insight.narrative }));
   }
 
-  if (insight && Array.isArray(insight.scenarios)) {
+  if (insight && Array.isArray(insight.key_transformations)) {
+    children.push(new Paragraph({ text: 'Key Transformations', heading: HeadingLevel.HEADING_1 }));
+    for (const t of insight.key_transformations) {
+      if (t.title) children.push(new Paragraph({ text: t.title, heading: HeadingLevel.HEADING_2 }));
+      if (t.description) children.push(new Paragraph({ text: t.description }));
+      if (t.business_value) {
+        children.push(new Paragraph({ children: [new TextRun({ text: 'Business Value: ', bold: true }), new TextRun({ text: t.business_value })] }));
+      }
+    }
+  }
+
+  if (insight && Array.isArray(insight.process_changes)) {
+    children.push(new Paragraph({ text: 'Process Changes', heading: HeadingLevel.HEADING_1 }));
+    for (const pc of insight.process_changes) {
+      if (pc.process_name) children.push(new Paragraph({ text: pc.process_name, heading: HeadingLevel.HEADING_2 }));
+      if (pc.current_state) children.push(new Paragraph({ children: [new TextRun({ text: 'Current State: ', bold: true }), new TextRun({ text: pc.current_state })] }));
+      if (pc.future_state) children.push(new Paragraph({ children: [new TextRun({ text: 'Future State: ', bold: true }), new TextRun({ text: pc.future_state })] }));
+      for (const change of (pc.key_changes || [])) children.push(new Paragraph({ text: change, bullet: { level: 0 } }));
+    }
+  }
+
+  if (insight && Array.isArray(insight.system_changes)) {
+    children.push(new Paragraph({ text: 'System Changes', heading: HeadingLevel.HEADING_1 }));
+    for (const sc of insight.system_changes) {
+      children.push(new Paragraph({ children: [
+        new TextRun({ text: sc.system_name || 'System', bold: true }),
+        new TextRun({ text: ` (${sc.change_type || 'change'}) - ${sc.description || ''}` }),
+      ] }));
+    }
+  }
+
+  if (insight && Array.isArray(insight.process_maps)) {
+    children.push(new Paragraph({ text: 'Future State Process Maps', heading: HeadingLevel.HEADING_1 }));
+    for (const pm of insight.process_maps) {
+      if (pm.process_name) children.push(new Paragraph({ text: pm.process_name, heading: HeadingLevel.HEADING_2 }));
+      if (pm.mermaid) children.push(new Paragraph({ text: pm.mermaid }));
+    }
+  } else if (insight && Array.isArray(insight.scenarios)) {
     children.push(new Paragraph({ text: 'Scenarios', heading: HeadingLevel.HEADING_1 }));
     for (const s of insight.scenarios) {
       if (s.title) children.push(new Paragraph({ text: s.title, heading: HeadingLevel.HEADING_2 }));
       if (s.description) children.push(new Paragraph({ text: s.description }));
     }
+  }
+
+  if (insight && Array.isArray(insight.critical_success_factors)) {
+    children.push(new Paragraph({ text: 'Critical Success Factors', heading: HeadingLevel.HEADING_1 }));
+    for (const f of insight.critical_success_factors) children.push(new Paragraph({ text: f, bullet: { level: 0 } }));
+  }
+
+  if (insight && Array.isArray(insight.recommended_next_steps)) {
+    children.push(new Paragraph({ text: 'Recommended Next Steps', heading: HeadingLevel.HEADING_1 }));
+    for (const s of insight.recommended_next_steps) children.push(new Paragraph({ text: s, bullet: { level: 0 } }));
   }
 
   const doc = new Document({ sections: [{ children }] });

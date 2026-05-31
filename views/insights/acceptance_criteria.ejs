@@ -1,27 +1,53 @@
 <div class="container">
-  <%- include('../partials/insights_nav') %>
   <div class="page-header" style="margin-top:20px;">
-    <h1>Acceptance Criteria</h1>
+    <div>
+      <h1>Acceptance Criteria</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
     <% if (member.role !== 'viewer') { %>
-      <form method="POST" action="/projects/<%= project.id %>/acceptance-criteria">
+      <form method="POST" action="/projects/<%= project.id %>/acceptance-criteria" class="insight-generate-form">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <button type="submit" class="btn-primary">🤖 <%= insight ? 'Regenerate' : 'Generate' %></button>
+        <button type="submit" class="btn-primary"><%= insight ? 'Re-generate' : 'Generate Acceptance Criteria' %></button>
       </form>
     <% } %>
   </div>
-  <% if (!insight) { %>
-    <div class="empty-state"><p>Generate Gherkin-style acceptance criteria with AI.</p></div>
-  <% } else { const c = insight.content; %>
-    <% if (c.criteria) { %>
-      <% for (const cr of c.criteria) { %>
-        <div class="ac-block card" style="margin-bottom:14px;">
-          <h4><%= cr.requirement_title %></h4>
-          <% if (cr.given && cr.given.length) { %><p><strong>Given</strong> <%= cr.given.join(' AND ') %></p><% } %>
-          <% if (cr.when  && cr.when.length)  { %><p><strong>When</strong>  <%= cr.when.join(' AND ')  %></p><% } %>
-          <% if (cr.then  && cr.then.length)  { %><p><strong>Then</strong>  <%= cr.then.join(' AND ')  %></p><% } %>
-          <% if (cr.notes) { %><p class="muted"><small><%= cr.notes %></small></p><% } %>
+
+  <%- include('../partials/insights_toast') %>
+  <%- include('../partials/insights_nav') %>
+
+  <% if (insight) { const data = insight.content || {}; const items = data.items || (data.criteria || []).map(c => ({ requirement_title: c.requirement_title, req_type: c.req_type, criteria: [{ given: (c.given || []).join(' AND '), when: (c.when || []).join(' AND '), then: (c.then || []).join(' AND ') }] })); %>
+    <p class="insight-generated-at">Generated <%= new Date(insight.generated_at).toISOString().slice(0,16).replace('T',' ') %> UTC - re-run after adding new sources to refresh.</p>
+    <% if (items.length) { %>
+      <p class="muted"><%= items.length %> requirement<%= items.length === 1 ? '' : 's' %> with Gherkin acceptance criteria.</p>
+      <% items.forEach(function(item, idx) { %>
+        <div class="ac-item">
+          <div class="ac-item-header">
+            <span class="muted"><%= idx + 1 %></span>
+            <span class="ac-item-title"><%= item.requirement_title %></span>
+            <% if (item.req_type) { %><span class="badge-muted"><%= item.req_type %></span><% } %>
+          </div>
+          <% for (const c of (item.criteria || [])) { %>
+            <div class="ac-criterion">
+              <div class="ac-gwt">
+                <span class="ac-gwt-label ac-given">Given</span>
+                <span><%= c.given %></span>
+                <span class="ac-gwt-label ac-when">When</span>
+                <span><%= c.when %></span>
+                <span class="ac-gwt-label ac-then">Then</span>
+                <span><%= c.then %></span>
+              </div>
+            </div>
+          <% } %>
         </div>
-      <% } %>
+      <% }); %>
+    <% } else { %>
+      <div class="card empty-state"><p>No criteria could be generated. Check that requirements have been extracted.</p></div>
     <% } %>
+  <% } else { %>
+    <div class="insight-empty">
+      <p class="insight-empty-icon">◇</p>
+      <h3>No acceptance criteria yet</h3>
+      <p>Click <strong>Generate Acceptance Criteria</strong> to create Given/When/Then scenarios for each extracted requirement.</p>
+    </div>
   <% } %>
 </div>

@@ -233,20 +233,20 @@
       <div class="section-header">
         <h3>Team Members</h3>
         <% if (member.role === 'owner') { %>
-          <button class="btn-sm btn-outline"
-            onclick="var f=document.getElementById('invite-form');f.style.display='block';f.scrollIntoView({behavior:'smooth',block:'nearest'});this.style.display='none'">
+          <button type="button" class="btn-sm btn-outline" id="invite-toggle"
+            aria-controls="invite-form" aria-expanded="false">
             + Invite Member
           </button>
         <% } %>
       </div>
 
-      <div id="invite-form" style="display:none;padding:16px;border-bottom:1px solid var(--border);">
+      <div id="invite-form" class="invite-form-panel" hidden>
         <form method="POST" action="/projects/<%= project.id %>/members/invite"
               style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div style="flex:1;min-width:180px;">
             <label class="form-label">Email address</label>
-            <input type="email" name="email" class="form-input" placeholder="colleague@example.com" required>
+            <input type="email" name="email" id="invite-email" class="form-input" placeholder="colleague@example.com" required>
           </div>
           <div style="width:140px;">
             <label class="form-label">Role</label>
@@ -310,7 +310,15 @@
                     <%= s.ai_status === 'done' ? 'Extracted' : s.ai_status === 'processing' ? 'Processing' : s.ai_status === 'failed' ? 'Failed' : 'Pending' %>
                   </span>
                 </td>
-                <td><a href="/sources/<%= s.id %>" class="btn-outline btn-sm">View</a></td>
+                <td class="row-actions">
+                  <a href="/sources/<%= s.id %>" class="btn-outline btn-sm">View</a>
+                  <% if (member.role !== 'viewer' && s.extraction_status === 'done' && s.ai_status !== 'done') { %>
+                    <form method="POST" action="/sources/<%= s.id %>/extract" style="display:inline;">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button type="submit" class="btn-primary btn-sm"><%= s.ai_status === 'failed' || s.ai_status === 'processing' ? 'Retry AI' : 'Extract AI' %></button>
+                    </form>
+                  <% } %>
+                </td>
               </tr>
             <% } %>
           </tbody>
@@ -333,6 +341,20 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 (function(){
+  const inviteToggle = document.getElementById('invite-toggle');
+  const inviteForm = document.getElementById('invite-form');
+  const inviteEmail = document.getElementById('invite-email');
+  if (inviteToggle && inviteForm) {
+    inviteToggle.addEventListener('click', function() {
+      inviteForm.hidden = false;
+      inviteForm.classList.add('is-visible');
+      inviteToggle.setAttribute('aria-expanded', 'true');
+      inviteToggle.hidden = true;
+      inviteForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (inviteEmail) inviteEmail.focus();
+    });
+  }
+
   const recalibrateBtn = document.getElementById('recalibrateBtn');
   if (recalibrateBtn) {
     recalibrateBtn.addEventListener('click', function(){

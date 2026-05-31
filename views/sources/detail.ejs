@@ -19,9 +19,15 @@
         <form method="POST" action="/sources/<%= source.id %>/extract" class="extract-form">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <button type="submit" class="<%= source.ai_status === 'done' ? 'btn-outline' : 'btn-primary' %>" id="extractBtn">
-            <%= source.ai_status === 'done' ? 'Re-extract with AI' : 'Extract with AI' %>
+            <%= source.ai_status === 'done' ? 'Re-extract with AI' : source.ai_status === 'failed' || source.ai_status === 'processing' ? 'Retry Extract with AI' : 'Extract with AI' %>
           </button>
         </form>
+        <% if (source.ai_status === 'processing') { %>
+          <form method="POST" action="/sources/<%= source.id %>/reset-ai">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="btn-outline">Reset Status</button>
+          </form>
+        <% } %>
         <a href="/projects/<%= source.project_id %>/sources/upload" class="btn-outline">+ Upload Another</a>
         <form method="POST" action="/sources/<%= source.id %>/delete" onsubmit="return confirm('Delete this source and all its extracted entities?')">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -86,7 +92,12 @@
       <% } else if (source.ai_status === 'done') { %>
         <div class="notice notice-success source-side-notice">AI extraction complete. View extracted entities in the <a href="/projects/<%= source.project_id %>">project hub</a>.</div>
       <% } else if (source.ai_status === 'failed') { %>
-        <div class="notice notice-warning source-side-notice">AI extraction failed. Check configuration and try again.</div>
+        <div class="notice notice-warning source-side-notice">
+          <strong>AI extraction failed.</strong>
+          <%= source.metadata && source.metadata.ai_error ? source.metadata.ai_error : 'Check configuration and try again.' %>
+        </div>
+      <% } else if (source.ai_status === 'processing') { %>
+        <div class="notice notice-warning source-side-notice">AI extraction is marked as processing. If it is not actively running, use <strong>Retry Extract with AI</strong> or reset the status.</div>
       <% } %>
     </aside>
   </div>
@@ -181,6 +192,7 @@
       btn.textContent = originalBtnText;
     }
     showToast('error', 'Extraction failed', msg);
+    setTimeout(function(){ window.location.reload(); }, 1400);
   }
 
   document.querySelectorAll('.extract-form').forEach(function(form){

@@ -1,200 +1,587 @@
 <div class="container">
   <%- include('../partials/insights_nav') %>
+
   <div class="page-header" style="margin-top:20px;">
-    <h1>🎙 Voice Capture</h1>
-    <button class="btn-outline btn-sm voice-new-turn" id="btn-new-turn" onclick="newTurn()" disabled>New Turn</button>
-  </div>
-
-  <!-- Speakers -->
-  <div class="card" style="margin-bottom:16px;">
-    <div class="section-header" style="padding:14px 0 10px;">
-      <h3>Speakers</h3>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-      <input type="text" id="speaker-name" class="form-input" placeholder="Speaker name" style="flex:1;min-width:160px;">
-      <input type="text" id="speaker-role" class="form-input" placeholder="Role or team" style="flex:1;min-width:160px;">
-      <button class="btn-primary btn-sm" onclick="addSpeaker()">Add</button>
-    </div>
-    <div class="speaker-chips" id="speaker-chips">
-      <span class="speaker-chip active" data-id="0" onclick="selectSpeaker(0)">0 Unknown Speaker</span>
+    <div>
+      <h1>Voice Capture</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
     </div>
   </div>
 
-  <!-- Recording -->
-  <div class="card" style="margin-bottom:16px;">
-    <p class="badge-warning" style="display:inline-block;margin-bottom:16px;">Chrome / Edge only — requires microphone permission</p>
+  <div class="voice-page">
+    <div class="voice-browser-warn notice notice-warning" id="browserWarn" style="display:none;">
+      Your browser does not support the Web Speech API. Voice capture works best in Chrome or Edge on desktop.
+    </div>
 
-    <div class="voice-controls">
-      <button id="btn-start" class="rec-btn rec-btn-start" onclick="startRecording()" title="Start recording">🎙</button>
-      <button id="btn-pause" class="rec-btn rec-btn-pause" onclick="togglePause()" disabled title="Pause / Resume">⏸</button>
-      <button id="btn-stop"  class="rec-btn rec-btn-stop"  onclick="stopRecording()"  disabled title="Stop recording">⏹</button>
-      <div class="rec-meta">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="filter-profanity"> Filter profanity &amp; vulgarity
-        </label>
-        <span class="speaker-label" id="current-speaker-label">Speaker: Unknown Speaker</span>
+    <div class="voice-speaker-panel">
+      <div class="voice-speaker-header">
+        <h3>Speakers</h3>
+        <button type="button" class="btn-outline btn-sm" id="btnNewTurn">New Turn</button>
       </div>
+      <div class="voice-speaker-form">
+        <input type="text" id="speakerNameInput" class="form-input" placeholder="Speaker name">
+        <input type="text" id="speakerRoleInput" class="form-input" placeholder="Role or team">
+        <button type="button" class="btn-primary btn-sm" id="btnAddSpeaker">Add</button>
+      </div>
+      <div class="speaker-chip-row" id="speakerChips"></div>
     </div>
 
-    <div id="recording-status" style="margin-top:12px;font-size:0.88rem;color:var(--muted);display:none;">
-      🔴 Recording…
-    </div>
-  </div>
+    <div class="voice-controls-card">
+      <div class="voice-controls">
+        <button type="button" class="mic-btn mic-btn-start" id="btnStart" title="Start recording" aria-label="Start recording">🎙</button>
+        <button type="button" class="mic-btn mic-btn-pause" id="btnPause" title="Pause" aria-label="Pause recording" disabled>⏸</button>
+        <button type="button" class="mic-btn mic-btn-stop" id="btnStop" title="Stop" aria-label="Stop recording" disabled>⏹</button>
 
-  <!-- Transcript -->
-  <div class="card" id="transcript-wrap">
-    <form method="POST" action="/projects/<%= project.id %>/voice-capture/save">
+        <div class="mic-status">
+          <div class="mic-status-text" id="micStatusText">Ready to record</div>
+          <div class="mic-status-sub" id="micStatusSub">Press the microphone button to start</div>
+        </div>
+
+        <div class="voice-filter-row">
+          <label>
+            <input type="checkbox" id="filterToggle" checked>
+            Filter profanity &amp; vulgarity
+          </label>
+          <span class="voice-current-speaker" id="currentSpeakerLabel">Speaker: Unknown Speaker</span>
+        </div>
+      </div>
+      <div id="recording-error" class="notice notice-danger" style="display:none;margin-top:12px;"></div>
+    </div>
+
+    <div class="transcript-box" id="transcriptBox">
+      <span class="transcript-placeholder" id="transcriptPlaceholder">Your transcription will appear here...</span>
+    </div>
+    <div class="transcript-word-count" id="wordCount"></div>
+
+    <div class="voice-review-panel" id="reviewPanel">
+      <div class="voice-review-header">
+        <h3>Review &amp; Label</h3>
+        <div class="voice-copy-controls">
+          <select id="copyFormat" class="form-input">
+            <option value="chronological">Chronological</option>
+            <option value="grouped">Grouped by speaker</option>
+          </select>
+          <button type="button" class="btn-outline" id="btnCopy" disabled>Copy Transcript</button>
+        </div>
+      </div>
+      <div class="voice-review-list" id="reviewList">
+        <div class="voice-review-empty">No transcript turns yet.</div>
+      </div>
+      <div class="voice-copy-status" id="copyStatus" aria-live="polite"></div>
+    </div>
+
+    <form method="POST" action="/projects/<%= project.id %>/voice-capture/save" class="voice-save-form" id="saveForm">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <h3>Save transcript as source</h3>
       <div class="form-group">
-        <label class="form-label">Transcript</label>
-        <textarea id="transcript" name="transcript" class="form-input form-textarea" rows="12"
-          placeholder="Your transcription will appear here..."></textarea>
+        <label class="form-label">Title</label>
+        <input type="text" name="title" id="saveTitle" placeholder="e.g. Stakeholder Interview - Finance Team" class="form-input">
       </div>
+      <textarea name="transcript" id="hiddenTranscript" hidden></textarea>
+      <textarea name="participants" id="hiddenParticipants" hidden></textarea>
+      <textarea name="speaker_turns" id="hiddenSpeakerTurns" hidden></textarea>
       <div class="form-actions">
-        <button type="submit" class="btn-primary" id="btn-save" disabled>Save as Source</button>
-        <span style="font-size:0.82rem;color:var(--muted);">Saved as a source you can then run AI extraction on.</span>
+        <button type="submit" class="btn-primary" id="btnSave" disabled>Save &amp; Extract Entities</button>
+        <button type="button" class="btn-outline" id="btnCopySecondary" disabled>Copy Transcript</button>
+        <button type="button" class="btn-outline" id="btnClear">Clear Transcript</button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
-const PROFANITY = ['fuck','shit','bitch','asshole','bastard','crap','damn','ass','piss'];
+(function () {
+  const PROFANITY = ['fuck','fucking','fucked','fucker','fucks','shit','shitting','shitty','crap','ass','asshole','bitch','bastard','damn','damnit','cunt','dick','prick','pussy','cock','bollocks','wanker','twat','arse','bugger','shag','bloody','motherfucker','motherfucking','bullshit','horseshit','jackass','douchebag','retard','retarded','nigger','nigga','faggot','fag','dyke','slut','whore','hell','piss','pissed','bastards','bitches','assholes'];
 
-let recognition;
-let isPaused     = false;
-let isRecording  = false;
-let accumulated  = '';
-let speakers     = [{ id: 0, name: 'Unknown Speaker', role: '' }];
-let nextId       = 1;
-let currentSpId  = 0;
+  const btnStart = document.getElementById('btnStart');
+  const btnPause = document.getElementById('btnPause');
+  const btnStop = document.getElementById('btnStop');
+  const btnSave = document.getElementById('btnSave');
+  const btnCopy = document.getElementById('btnCopy');
+  const btnCopySecondary = document.getElementById('btnCopySecondary');
+  const btnClear = document.getElementById('btnClear');
+  const statusText = document.getElementById('micStatusText');
+  const statusSub = document.getElementById('micStatusSub');
+  const transcriptBox = document.getElementById('transcriptBox');
+  const placeholder = document.getElementById('transcriptPlaceholder');
+  const wordCountEl = document.getElementById('wordCount');
+  const hiddenInput = document.getElementById('hiddenTranscript');
+  const hiddenParticipants = document.getElementById('hiddenParticipants');
+  const hiddenSpeakerTurns = document.getElementById('hiddenSpeakerTurns');
+  const speakerNameInput = document.getElementById('speakerNameInput');
+  const speakerRoleInput = document.getElementById('speakerRoleInput');
+  const btnAddSpeaker = document.getElementById('btnAddSpeaker');
+  const btnNewTurn = document.getElementById('btnNewTurn');
+  const speakerChips = document.getElementById('speakerChips');
+  const currentSpeakerLabel = document.getElementById('currentSpeakerLabel');
+  const reviewList = document.getElementById('reviewList');
+  const copyFormat = document.getElementById('copyFormat');
+  const copyStatus = document.getElementById('copyStatus');
+  const errorEl = document.getElementById('recording-error');
 
-const btnStart  = document.getElementById('btn-start');
-const btnPause  = document.getElementById('btn-pause');
-const btnStop   = document.getElementById('btn-stop');
-const btnNewTurn= document.getElementById('btn-new-turn');
-const btnSave   = document.getElementById('btn-save');
-const tArea     = document.getElementById('transcript');
-const statusEl  = document.getElementById('recording-status');
-const spLabel   = document.getElementById('current-speaker-label');
-const chipsEl   = document.getElementById('speaker-chips');
+  let speakerTurns = [];
+  let participants = [{ id: 'unknown', name: 'Unknown Speaker', role: '' }];
+  let currentSpeakerId = 'unknown';
+  let forceNewTurn = false;
+  let isRecording = false;
+  let isPaused = false;
+  let recognition = null;
+  let elapsedSec = 0;
+  let timerInterval = null;
+  let restartTimer = null;
 
-function renderChips() {
-  chipsEl.innerHTML = '';
-  speakers.forEach(function(sp) {
-    const c = document.createElement('span');
-    c.className = 'speaker-chip' + (sp.id === currentSpId ? ' active' : '');
-    c.setAttribute('data-id', sp.id);
-    c.textContent = sp.id + ' ' + sp.name;
-    c.onclick = function(){ selectSpeaker(sp.id); };
-    chipsEl.appendChild(c);
-  });
-}
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
+    document.getElementById('browserWarn').style.display = 'block';
+    btnStart.disabled = true;
+  }
 
-function selectSpeaker(id) {
-  const sp = speakers.find(function(s){ return s.id === id; });
-  if (!sp) return;
-  currentSpId = id;
-  spLabel.textContent = 'Speaker: ' + sp.name;
-  renderChips();
-}
+  function setVoiceError(message) {
+    if (!message) {
+      errorEl.style.display = 'none';
+      errorEl.textContent = '';
+      return;
+    }
+    errorEl.textContent = message;
+    errorEl.style.display = 'block';
+  }
 
-function addSpeaker() {
-  const name = document.getElementById('speaker-name').value.trim();
-  if (!name) return;
-  const role = document.getElementById('speaker-role').value.trim();
-  speakers.push({ id: nextId, name: name, role: role });
-  nextId++;
-  document.getElementById('speaker-name').value = '';
-  document.getElementById('speaker-role').value = '';
-  renderChips();
-}
+  function filterText(text) {
+    if (!document.getElementById('filterToggle').checked) return text;
+    const re = new RegExp('\\b(' + PROFANITY.join('|') + ')\\b', 'gi');
+    return text.replace(re, function(m){ return '*'.repeat(m.length); });
+  }
 
-function newTurn() {
-  const sp = speakers.find(function(s){ return s.id === currentSpId; });
-  const label = sp ? sp.name : 'Unknown Speaker';
-  const val = tArea.value;
-  tArea.value = val + (val && !val.endsWith('\n') ? '\n' : '') + '[' + label + ']: ';
-  tArea.focus();
-  tArea.setSelectionRange(tArea.value.length, tArea.value.length);
-}
+  function currentSpeaker() {
+    return participants.find(function(p){ return p.id === currentSpeakerId; }) || participants[0];
+  }
 
-function filterText(t) {
-  if (!document.getElementById('filter-profanity').checked) return t;
-  PROFANITY.forEach(function(w) {
-    t = t.replace(new RegExp('\\b' + w + '\\b', 'gi'), '***');
-  });
-  return t;
-}
+  function speakerLabel(speaker) {
+    return speaker.role ? speaker.name + ' - ' + speaker.role : speaker.name;
+  }
 
-function buildRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { alert('Speech recognition is not supported. Use Chrome or Edge.'); return null; }
-  const r = new SR();
-  r.continuous     = true;
-  r.interimResults = true;
-  r.lang           = 'en-GB';
-  r.onresult = function(e) {
-    let interim = '';
-    let final   = accumulated;
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) {
-        final += filterText(e.results[i][0].transcript) + ' ';
+  function transcriptText(extraInterim) {
+    const lines = speakerTurns.filter(function(turn){ return turn.text.trim(); }).map(function(turn) {
+      return '[' + speakerLabel(turn.speaker) + ']\n' + turn.text.trim();
+    });
+    if (extraInterim && extraInterim.trim()) lines.push('[' + speakerLabel(currentSpeaker()) + ']\n' + extraInterim.trim());
+    return lines.join('\n\n');
+  }
+
+  function groupedTranscriptText() {
+    const grouped = {};
+    const order = [];
+    speakerTurns.filter(function(turn){ return turn.text.trim(); }).forEach(function(turn) {
+      const label = speakerLabel(turn.speaker);
+      if (!grouped[label]) { grouped[label] = []; order.push(label); }
+      grouped[label].push(turn.text.trim());
+    });
+    return order.map(function(label) { return '[' + label + ']\n' + grouped[label].join('\n\n'); }).join('\n\n');
+  }
+
+  function copyText() {
+    return copyFormat.value === 'grouped' ? groupedTranscriptText() : transcriptText('');
+  }
+
+  function appendFinalText(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    const speaker = currentSpeaker();
+    let last = speakerTurns[speakerTurns.length - 1];
+    if (!last || last.speaker.id !== speaker.id || forceNewTurn) {
+      last = { speaker: { id: speaker.id, name: speaker.name, role: speaker.role }, text: '' };
+      speakerTurns.push(last);
+    }
+    last.text = (last.text + ' ' + text).trim();
+    forceNewTurn = false;
+  }
+
+  function renderSpeakers() {
+    speakerChips.innerHTML = '';
+    let realSpeakerNum = 0;
+    participants.forEach(function(p) {
+      let shortcut = '0';
+      if (p.id !== 'unknown') {
+        realSpeakerNum++;
+        shortcut = String(realSpeakerNum);
+      }
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'speaker-chip' + (p.id === currentSpeakerId ? ' speaker-chip-active active' : '');
+      chip.title = realSpeakerNum <= 9 || p.id === 'unknown' ? 'Shortcut: ' + shortcut : 'Select speaker';
+      chip.dataset.id = p.id;
+      chip.innerHTML = '<span class="speaker-chip-num">' + shortcut + '</span><span>' + escHtml(speakerLabel(p)) + '</span>';
+      chip.addEventListener('click', function() { selectSpeaker(p.id); });
+      if (p.id !== 'unknown') {
+        const remove = document.createElement('span');
+        remove.className = 'speaker-chip-remove';
+        remove.textContent = '×';
+        remove.title = 'Remove speaker';
+        remove.addEventListener('click', function(e) {
+          e.stopPropagation();
+          removeSpeaker(p.id);
+        });
+        chip.appendChild(remove);
+      }
+      speakerChips.appendChild(chip);
+    });
+    currentSpeakerLabel.textContent = 'Speaker: ' + speakerLabel(currentSpeaker());
+    hiddenParticipants.value = JSON.stringify(participants.filter(function(p){ return p.id !== 'unknown'; }));
+    renderReview();
+  }
+
+  function selectSpeaker(id) {
+    if (id !== currentSpeakerId) forceNewTurn = true;
+    currentSpeakerId = id;
+    renderSpeakers();
+    renderTranscript('');
+  }
+
+  function addSpeaker() {
+    const name = speakerNameInput.value.trim();
+    const role = speakerRoleInput.value.trim();
+    if (!name) return;
+    const id = 'sp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+    participants.push({ id: id, name: name, role: role });
+    speakerNameInput.value = '';
+    speakerRoleInput.value = '';
+    selectSpeaker(id);
+    speakerNameInput.focus();
+  }
+
+  function removeSpeaker(id) {
+    if (id === 'unknown') return;
+    participants = participants.filter(function(p){ return p.id !== id; });
+    speakerTurns.forEach(function(turn) {
+      if (turn.speaker.id === id) turn.speaker = { id: 'unknown', name: 'Unknown Speaker', role: '' };
+    });
+    if (currentSpeakerId === id) currentSpeakerId = 'unknown';
+    forceNewTurn = true;
+    renderSpeakers();
+    renderTranscript('');
+  }
+
+  function renderTranscript(interim, skipReview) {
+    if (placeholder) placeholder.style.display = 'none';
+    let html = speakerTurns.filter(function(turn){ return turn.text.trim(); }).map(function(turn) {
+      return '<div class="speaker-turn"><div class="speaker-turn-label">' + escHtml(speakerLabel(turn.speaker)) + '</div><div class="speaker-turn-text">' + escHtml(turn.text.trim()) + '</div></div>';
+    }).join('');
+    if (interim && interim.trim()) {
+      html += '<div class="speaker-turn speaker-turn-interim"><div class="speaker-turn-label">' + escHtml(speakerLabel(currentSpeaker())) + '</div><div class="speaker-turn-text transcript-interim">' + escHtml(interim.trim()) + '</div></div>';
+    }
+    transcriptBox.innerHTML = html || '';
+    if (!html && placeholder) { placeholder.style.display = ''; transcriptBox.appendChild(placeholder); }
+    const savedText = transcriptText('');
+    const words = savedText.trim().split(/\s+/).filter(Boolean).length;
+    wordCountEl.textContent = words > 0 ? words + ' word' + (words !== 1 ? 's' : '') : '';
+    hiddenInput.value = savedText.trim();
+    hiddenSpeakerTurns.value = JSON.stringify(speakerTurns.filter(function(turn){ return turn.text.trim(); }));
+    btnSave.disabled = savedText.trim().length === 0;
+    btnCopy.disabled = savedText.trim().length === 0;
+    btnCopySecondary.disabled = savedText.trim().length === 0;
+    if (!skipReview) renderReview();
+  }
+
+  function speakerOptions(selectedId) {
+    return participants.map(function(p) {
+      const selected = p.id === selectedId ? ' selected' : '';
+      return '<option value="' + escAttr(p.id) + '"' + selected + '>' + escHtml(speakerLabel(p)) + '</option>';
+    }).join('');
+  }
+
+  function setTurnSpeaker(index, speakerId) {
+    const speaker = participants.find(function(p){ return p.id === speakerId; }) || participants[0];
+    if (!speakerTurns[index]) return;
+    speakerTurns[index].speaker = { id: speaker.id, name: speaker.name, role: speaker.role };
+    syncTranscriptState();
+  }
+
+  function setTurnText(index, text) {
+    if (!speakerTurns[index]) return;
+    speakerTurns[index].text = text;
+    renderTranscript('', true);
+  }
+
+  function splitTurn(index) {
+    const turn = speakerTurns[index];
+    if (!turn || !turn.text.trim()) return;
+    const text = turn.text.trim();
+    const midpoint = Math.floor(text.length / 2);
+    let splitAt = text.indexOf('.', midpoint);
+    if (splitAt === -1) splitAt = text.indexOf('?', midpoint);
+    if (splitAt === -1) splitAt = text.indexOf('!', midpoint);
+    if (splitAt === -1) splitAt = text.indexOf(' ', midpoint);
+    if (splitAt <= 0 || splitAt >= text.length - 1) return;
+    turn.text = text.slice(0, splitAt + 1).trim();
+    speakerTurns.splice(index + 1, 0, { speaker: { id: turn.speaker.id, name: turn.speaker.name, role: turn.speaker.role }, text: text.slice(splitAt + 1).trim() });
+    syncTranscriptState();
+  }
+
+  function renderReview() {
+    const turns = speakerTurns.filter(function(turn){ return turn.text.trim(); });
+    if (!turns.length) {
+      reviewList.innerHTML = '<div class="voice-review-empty">No transcript turns yet.</div>';
+      return;
+    }
+    reviewList.innerHTML = turns.map(function(turn, visibleIndex) {
+      const index = speakerTurns.indexOf(turn);
+      return '<div class="voice-review-turn" data-index="' + index + '"><div class="voice-review-turn-tools"><select class="form-input voice-review-speaker" data-action="speaker">' + speakerOptions(turn.speaker.id) + '</select><button type="button" class="btn-outline btn-sm" data-action="split">Split</button></div><textarea class="form-input voice-review-text" rows="3" data-action="text" aria-label="Transcript turn ' + (visibleIndex + 1) + '">' + escHtml(turn.text.trim()) + '</textarea></div>';
+    }).join('');
+  }
+
+  function syncTranscriptState() {
+    speakerTurns = speakerTurns.filter(function(turn){ return turn.text.trim(); });
+    renderTranscript('');
+  }
+
+  function setCopyStatus(message, isError) {
+    copyStatus.textContent = message || '';
+    copyStatus.className = 'voice-copy-status' + (isError ? ' voice-copy-status-error' : '');
+    if (message) {
+      setTimeout(function() { if (copyStatus.textContent === message) copyStatus.textContent = ''; }, 3000);
+    }
+  }
+
+  function fallbackCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      setCopyStatus('Transcript copied.');
+    } catch (err) {
+      setCopyStatus('Copy failed. Select the transcript text and copy manually.', true);
+    }
+    document.body.removeChild(textarea);
+  }
+
+  function copyTranscript() {
+    const text = copyText().trim();
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() { setCopyStatus('Transcript copied.'); }).catch(function() { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function escAttr(s) {
+    return escHtml(String(s)).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  function startTimer() {
+    timerInterval = setInterval(function () {
+      elapsedSec++;
+      const m = Math.floor(elapsedSec / 60), s = elapsedSec % 60;
+      statusSub.textContent = 'Recording ' + m + ':' + (s < 10 ? '0' : '') + s;
+    }, 1000);
+  }
+
+  function stopTimer() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+
+  function setStatus(main, sub, showPulse) {
+    statusText.innerHTML = (showPulse ? '<span class="mic-pulse"></span>' : '') + escHtml(main);
+    statusSub.textContent = sub || '';
+  }
+
+  function buildRecognition() {
+    if (!window.isSecureContext) {
+      setVoiceError('Microphone capture requires localhost or HTTPS. Open the app on localhost or a secure URL and try again.');
+      return null;
+    }
+    if (!SpeechRec) {
+      setVoiceError('Speech recognition is not supported in this browser. Use Chrome or Edge.');
+      return null;
+    }
+    const r = new SpeechRec();
+    r.continuous = true;
+    r.interimResults = true;
+    r.lang = 'en-US';
+    r.onresult = function (e) {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) appendFinalText(filterText(t));
+        else interim += t;
+      }
+      renderTranscript(filterText(interim));
+    };
+    r.onerror = function (e) {
+      if (!isRecording || isPaused) return;
+      if (e.error === 'no-speech' || e.error === 'aborted') {
+        scheduleRecognitionRestart();
+        return;
+      }
+      const messages = {
+        'not-allowed': 'Microphone permission was blocked. Allow microphone access in the browser and try again.',
+        'service-not-allowed': 'Speech recognition is blocked by the browser or this site context.',
+        'audio-capture': 'No microphone was found. Connect or enable a microphone and try again.',
+        'network': 'Speech recognition could not reach the browser speech service. Check your connection and try again.',
+      };
+      setVoiceError(messages[e.error] || 'Speech capture paused briefly and is reconnecting.');
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') {
+        stopRecording();
       } else {
-        interim += e.results[i][0].transcript;
+        scheduleRecognitionRestart();
+      }
+    };
+    r.onend = function () { scheduleRecognitionRestart(); };
+    return r;
+  }
+
+  function scheduleRecognitionRestart() {
+    if (!isRecording || isPaused || restartTimer) return;
+    restartTimer = setTimeout(function() {
+      restartTimer = null;
+      if (!isRecording || isPaused) return;
+      startRecognitionInstance(true);
+    }, 350);
+  }
+
+  function startRecognitionInstance(isRestart) {
+    if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+    recognition = buildRecognition();
+    if (!recognition) return false;
+    try {
+      recognition.start();
+      if (isRestart) setStatus('Recording...', 'Listening again after a browser pause.', true);
+      return true;
+    } catch (ex) {
+      scheduleRecognitionRestart();
+      return false;
+    }
+  }
+
+  async function startRecording() {
+    setVoiceError('');
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(function(track){ track.stop(); });
+      } catch (err) {
+        setVoiceError('Microphone permission was denied or unavailable. Allow microphone access and try again.');
+        return;
       }
     }
-    accumulated = final;
-    tArea.value = final + interim;
-    btnSave.disabled = !(final.trim().length > 0);
-  };
-  r.onend = function() {
-    if (isRecording && !isPaused) {
-      r.start();
-    }
-  };
-  return r;
-}
-
-function startRecording() {
-  recognition = buildRecognition();
-  if (!recognition) return;
-  isRecording = true;
-  isPaused    = false;
-  accumulated = tArea.value;
-  recognition.start();
-  btnStart.disabled = true;
-  btnPause.disabled = false;
-  btnStop.disabled  = false;
-  btnNewTurn.disabled = false;
-  statusEl.style.display = 'block';
-}
-
-function togglePause() {
-  if (!isRecording) return;
-  if (isPaused) {
+    isRecording = true;
     isPaused = false;
-    recognition.start();
-    btnPause.title = 'Pause';
-    btnPause.textContent = '⏸';
-    statusEl.style.display = 'block';
-  } else {
-    isPaused = true;
-    recognition.stop();
-    btnPause.title = 'Resume';
-    btnPause.textContent = '▶';
-    statusEl.style.display = 'none';
+    if (!startRecognitionInstance(false)) {
+      isRecording = false;
+      return;
+    }
+    btnStart.disabled = true;
+    btnPause.disabled = false;
+    btnStop.disabled = false;
+    setStatus('Recording...', '', true);
+    startTimer();
   }
-}
 
-function stopRecording() {
-  isRecording = false;
-  isPaused    = false;
-  if (recognition) recognition.stop();
-  btnStart.disabled = false;
-  btnPause.disabled = true;
-  btnStop.disabled  = true;
-  statusEl.style.display = 'none';
-  btnSave.disabled = !(tArea.value.trim().length > 0);
-}
+  function togglePause() {
+    if (!isRecording) return;
+    if (!isPaused) {
+      isPaused = true;
+      if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+      if (recognition) { try { recognition.stop(); } catch(ex) {} }
+      stopTimer();
+      btnPause.title = 'Resume';
+      btnPause.textContent = '▶';
+      setStatus('Paused', 'Press play to resume', false);
+    } else {
+      isPaused = false;
+      startRecognitionInstance(false);
+      startTimer();
+      btnPause.title = 'Pause';
+      btnPause.textContent = '⏸';
+      setStatus('Recording...', '', true);
+    }
+  }
+
+  function stopRecording() {
+    isRecording = false;
+    isPaused = false;
+    if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+    if (recognition) { try { recognition.stop(); } catch(ex) {} recognition = null; }
+    stopTimer();
+    btnStart.disabled = false;
+    btnPause.disabled = true;
+    btnStop.disabled = true;
+    btnPause.textContent = '⏸';
+    btnPause.title = 'Pause';
+    const words = transcriptText('').trim().split(/\s+/).filter(Boolean).length;
+    setStatus('Recording stopped', words + ' word' + (words !== 1 ? 's' : '') + ' captured', false);
+  }
+
+  function clearTranscript() {
+    if (transcriptText('').trim() && !confirm('Clear the transcript? This cannot be undone.')) return;
+    speakerTurns = [];
+    forceNewTurn = false;
+    elapsedSec = 0;
+    transcriptBox.innerHTML = '';
+    if (placeholder) { placeholder.style.display = ''; transcriptBox.appendChild(placeholder); }
+    wordCountEl.textContent = '';
+    hiddenInput.value = '';
+    hiddenSpeakerTurns.value = '';
+    btnSave.disabled = true;
+    btnCopy.disabled = true;
+    btnCopySecondary.disabled = true;
+    renderReview();
+    if (!isRecording) setStatus('Ready to record', 'Press the microphone button to start', false);
+  }
+
+  btnAddSpeaker.addEventListener('click', addSpeaker);
+  speakerNameInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); addSpeaker(); } });
+  speakerRoleInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); addSpeaker(); } });
+  btnNewTurn.addEventListener('click', function() {
+    forceNewTurn = true;
+    renderTranscript('');
+    setStatus(isRecording && !isPaused ? 'Recording...' : 'New turn ready', 'Next speech will start a fresh turn for ' + speakerLabel(currentSpeaker()), isRecording && !isPaused);
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    if (e.key === '0') { selectSpeaker('unknown'); return; }
+    if (/^[1-9]$/.test(e.key)) {
+      const idx = parseInt(e.key, 10) - 1;
+      const realParticipants = participants.filter(function(p){ return p.id !== 'unknown'; });
+      if (realParticipants[idx]) selectSpeaker(realParticipants[idx].id);
+    }
+  });
+  btnStart.addEventListener('click', startRecording);
+  btnPause.addEventListener('click', togglePause);
+  btnStop.addEventListener('click', stopRecording);
+  btnClear.addEventListener('click', clearTranscript);
+  btnCopy.addEventListener('click', copyTranscript);
+  btnCopySecondary.addEventListener('click', copyTranscript);
+  reviewList.addEventListener('change', function(e) {
+    const row = e.target.closest('.voice-review-turn');
+    if (!row || e.target.dataset.action !== 'speaker') return;
+    setTurnSpeaker(parseInt(row.dataset.index, 10), e.target.value);
+  });
+  reviewList.addEventListener('input', function(e) {
+    const row = e.target.closest('.voice-review-turn');
+    if (!row || e.target.dataset.action !== 'text') return;
+    setTurnText(parseInt(row.dataset.index, 10), e.target.value);
+  });
+  reviewList.addEventListener('click', function(e) {
+    const row = e.target.closest('.voice-review-turn');
+    if (!row || e.target.dataset.action !== 'split') return;
+    splitTurn(parseInt(row.dataset.index, 10));
+  });
+  document.getElementById('saveForm').addEventListener('submit', function () {
+    hiddenInput.value = transcriptText('').trim();
+    hiddenParticipants.value = JSON.stringify(participants.filter(function(p){ return p.id !== 'unknown'; }));
+    hiddenSpeakerTurns.value = JSON.stringify(speakerTurns.filter(function(turn){ return turn.text.trim(); }));
+  });
+  renderSpeakers();
+})();
 </script>
