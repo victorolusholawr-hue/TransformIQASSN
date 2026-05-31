@@ -1,106 +1,140 @@
 <div class="container">
-  <div class="page-header" style="margin-top:20px;">
-    <h1>Export Documents</h1>
+  <div class="page-header">
+    <div>
+      <h1>Export Documents</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <a href="/projects/<%= project.id %>" class="btn-outline">Back to Project</a>
   </div>
 
-  <div class="section" style="margin-bottom:28px;">
-    <div class="section-header"><h3>Generate Documents</h3></div>
-    <p class="muted" style="margin:8px 0 20px;">Build structured documents from extracted entities. All exports use project data captured in the requirements pipeline.</p>
+  <div class="export-grid">
+    <div class="export-card">
+      <span class="export-icon">📋</span>
+      <h3>Business Requirements Document</h3>
+      <p>Full BRD with stakeholders, functional and non-functional requirements, decisions, and risk summary.</p>
+      <form method="POST" action="/projects/<%= project.id %>/export/brd">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn-primary">Download BRD.docx</button>
+      </form>
+    </div>
 
-    <div class="entity-grid">
-      <div class="card" style="text-align:center;padding:24px 16px;">
-        <div style="font-size:2rem;margin-bottom:8px;">📄</div>
-        <h4 style="margin-bottom:6px;">Business Requirements</h4>
-        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">Full BRD with requirements, stakeholders, processes, and decisions</p>
-        <form method="POST" action="/projects/<%= project.id %>/export/brd">
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="btn-primary btn-sm">Download BRD (.docx)</button>
-        </form>
-      </div>
+    <div class="export-card">
+      <span class="export-icon">📄</span>
+      <h3>Functional Requirements Document</h3>
+      <p>Detailed FRD covering functional requirements, business rules, systems, and KPIs.</p>
+      <form method="POST" action="/projects/<%= project.id %>/export/frd">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn-primary">Download FRD.docx</button>
+      </form>
+    </div>
 
-      <div class="card" style="text-align:center;padding:24px 16px;">
-        <div style="font-size:2rem;margin-bottom:8px;">🔧</div>
-        <h4 style="margin-bottom:6px;">Functional Requirements</h4>
-        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">Technical FRD with functional requirements and system integrations</p>
-        <form method="POST" action="/projects/<%= project.id %>/export/frd">
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="btn-primary btn-sm">Download FRD (.docx)</button>
-        </form>
-      </div>
-
-      <div class="card" style="text-align:center;padding:24px 16px;">
-        <div style="font-size:2rem;margin-bottom:8px;">⚠️</div>
-        <h4 style="margin-bottom:6px;">Risk Register</h4>
-        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">Colour-coded Excel risk register with likelihood × impact scores</p>
-        <form method="POST" action="/projects/<%= project.id %>/export/risk-register">
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="btn-primary btn-sm">Download Risk Register (.xlsx)</button>
-        </form>
-      </div>
-
-      <div class="card" style="text-align:center;padding:24px 16px;">
-        <div style="font-size:2rem;margin-bottom:8px;">📊</div>
-        <h4 style="margin-bottom:6px;">Executive Summary</h4>
-        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">High-level overview with entity counts, top risks, and key decisions</p>
+    <div class="export-card">
+      <span class="export-icon">📊</span>
+      <h3>Executive Summary</h3>
+      <p>One-page summary with project overview, knowledge stats, top risks, and high-priority requirements.</p>
+      <div class="export-format-actions">
         <form method="POST" action="/projects/<%= project.id %>/export/executive-summary">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="btn-primary btn-sm">Download Summary (.docx)</button>
+          <input type="hidden" name="format" value="docx">
+          <button class="btn-primary">Download .docx</button>
+        </form>
+        <form method="POST" action="/projects/<%= project.id %>/export/executive-summary">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="format" value="pdf">
+          <button class="btn-outline">Download .pdf</button>
         </form>
       </div>
+    </div>
 
-      <% if (futureStateInsight) { %>
-      <div class="card" style="text-align:center;padding:24px 16px;">
-        <div style="font-size:2rem;margin-bottom:8px;">🚀</div>
-        <h4 style="margin-bottom:6px;">Future State Vision</h4>
-        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">AI-generated future state narrative with transformation layers</p>
+    <div class="export-card">
+      <span class="export-icon">⚠️</span>
+      <h3>Risk Register</h3>
+      <p>Styled Excel spreadsheet with all risks, scores (Likelihood x Impact), mitigations, and owners.</p>
+      <form method="POST" action="/projects/<%= project.id %>/export/risk-register">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn-primary">Download Risk_Register.xlsx</button>
+      </form>
+    </div>
+
+    <% if (futureStateInsight) { %>
+      <div class="export-card">
+        <span class="export-icon">🚀</span>
+        <h3>Future State Vision</h3>
+        <p>AI-generated future state narrative with transformation layers and next steps.</p>
         <form method="POST" action="/projects/<%= project.id %>/export/future-state">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="btn-primary btn-sm">Download Future State (.docx)</button>
+          <button class="btn-primary">Download Future_State.docx</button>
         </form>
       </div>
-      <% } else { %>
-      <div class="card" style="text-align:center;padding:24px 16px;opacity:0.6;">
-        <div style="font-size:2rem;margin-bottom:8px;">🚀</div>
-        <h4 style="margin-bottom:6px;">Future State Vision</h4>
-        <p class="muted" style="font-size:0.85rem;margin-bottom:16px;">Generate the Future State insight first to enable this export</p>
-        <a href="/projects/<%= project.id %>/future-state" class="btn-outline btn-sm">Generate Future State →</a>
+    <% } else { %>
+      <div class="export-card export-card-disabled">
+        <span class="export-icon">🚀</span>
+        <h3>Future State Vision</h3>
+        <p>Generate the Future State insight first to enable this export.</p>
+        <a href="/projects/<%= project.id %>/future-state" class="btn-outline">Generate Future State</a>
       </div>
+    <% } %>
+  </div>
+
+  <div class="section export-history-section">
+    <div class="section-header">
+      <h3>Export History</h3>
+      <% if (documents && documents.length) { %>
+        <span class="muted"><%= documents.length %> export<%= documents.length === 1 ? '' : 's' %></span>
+      <% } %>
+    </div>
+    <div class="section-body">
+      <% if (documents && documents.length) { %>
+        <div class="table-wrap">
+          <table class="students-table entity-table">
+            <thead>
+              <tr>
+                <th>Document Type</th>
+                <th>Version</th>
+                <th>Generated</th>
+                <th>Re-generate</th>
+                <th>Download</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% for (const doc of documents) { const type = String(doc.doc_type || '').toLowerCase(); %>
+                <tr>
+                  <td>
+                    <span class="export-history-icon"><%= type.includes('brd') ? '📋' : type.includes('frd') ? '📄' : type.includes('risk') ? '⚠️' : type.includes('future') ? '🚀' : '📊' %></span>
+                    <strong><%= type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) %></strong>
+                  </td>
+                  <td><span class="badge-muted">v<%= doc.version || 1 %></span></td>
+                  <td class="muted"><%= doc.generated_at ? new Date(doc.generated_at).toLocaleString() : '—' %></td>
+                  <td>
+                    <% if (type.includes('brd')) { %>
+                      <form method="POST" action="/projects/<%= project.id %>/export/brd"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn-outline btn-sm">Re-generate</button></form>
+                    <% } else if (type.includes('frd')) { %>
+                      <form method="POST" action="/projects/<%= project.id %>/export/frd"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn-outline btn-sm">Re-generate</button></form>
+                    <% } else if (type.includes('risk')) { %>
+                      <form method="POST" action="/projects/<%= project.id %>/export/risk-register"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn-outline btn-sm">Re-generate</button></form>
+                    <% } else if (type.includes('future')) { %>
+                      <form method="POST" action="/projects/<%= project.id %>/export/future-state"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn-outline btn-sm">Re-generate</button></form>
+                    <% } else if (type.includes('pdf')) { %>
+                      <form method="POST" action="/projects/<%= project.id %>/export/executive-summary"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="format" value="pdf"><button class="btn-outline btn-sm">Re-generate</button></form>
+                    <% } else { %>
+                      <form method="POST" action="/projects/<%= project.id %>/export/executive-summary"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="format" value="docx"><button class="btn-outline btn-sm">Re-generate</button></form>
+                    <% } %>
+                  </td>
+                  <td>
+                    <% if (doc.file_url) { %>
+                      <a href="<%= doc.file_url %>" class="btn-outline btn-sm" download>Download</a>
+                    <% } else { %>
+                      <span class="muted">—</span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %>
+        <div class="empty-state"><p>No exports yet. Generate your first document above.</p></div>
       <% } %>
     </div>
   </div>
-
-  <% if (documents && documents.length) { %>
-  <div class="section">
-    <div class="section-header"><h3>Export History</h3></div>
-    <table class="students-table" style="margin-top:12px;">
-      <thead>
-        <tr>
-          <th>Document</th>
-          <th>Generated</th>
-          <th>Version</th>
-          <th>Download</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% for (const doc of documents) { %>
-          <tr>
-            <td>
-              <% const icons = {brd:'📄',frd:'🔧',risk_register:'⚠️',executive_summary:'📊',future_state:'🚀'}; %>
-              <%= icons[doc.doc_type] || '📁' %> <strong><%= doc.doc_type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) %></strong>
-            </td>
-            <td class="muted" style="font-size:0.85rem;"><%= new Date(doc.generated_at).toLocaleString() %></td>
-            <td><span class="badge-muted">v<%= doc.version %></span></td>
-            <td>
-              <% if (doc.file_url) { %>
-                <a href="<%= doc.file_url %>" class="btn-outline btn-sm" download>Download</a>
-              <% } else { %>
-                <span class="muted">—</span>
-              <% } %>
-            </td>
-          </tr>
-        <% } %>
-      </tbody>
-    </table>
-  </div>
-  <% } %>
 </div>

@@ -19,6 +19,7 @@ const {
   assertAiConfigured,
 } = require('../services/ai');
 const { buildGraphEdges }                = require('../services/graphBuilder');
+const { reconcileProjectSourceStatuses, reconcileSingleSourceStatus } = require('../services/sourceStatus');
 const router   = express.Router();
 
 function wantsJson(req) {
@@ -188,6 +189,7 @@ const upload = multer({
 // ── List ─────────────────────────────────────────────────────
 router.get('/projects/:projectId/sources', loginRequired, projectAccessRequired, async (req, res) => {
   const pool   = await getPool();
+  await reconcileProjectSourceStatuses(pool, req.params.projectId);
   const result = await pool.request()
     .input('pid', sql.UniqueIdentifier, req.params.projectId)
     .query('SELECT * FROM dbo.Sources WHERE project_id=@pid ORDER BY created_at DESC');
@@ -269,6 +271,7 @@ router.post('/projects/:projectId/sources/upload',
 // ── Detail ───────────────────────────────────────────────────
 router.get('/sources/:id', loginRequired, async (req, res) => {
   const pool   = await getPool();
+  await reconcileSingleSourceStatus(pool, req.params.id);
   const result = await pool.request()
     .input('id', sql.UniqueIdentifier, req.params.id)
     .query('SELECT * FROM dbo.Sources WHERE id=@id');

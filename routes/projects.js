@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getPool, sql }       = require('../config/database');
 const { loginRequired, analystRequired } = require('../middleware/auth');
 const { projectAccessRequired }          = require('../middleware/projectAccess');
+const { reconcileProjectSourceStatuses } = require('../services/sourceStatus');
 const router   = express.Router();
 
 // ── List ────────────────────────────────────────────────────
@@ -56,6 +57,7 @@ router.get('/:id', loginRequired, projectAccessRequired, async (req, res) => {
   try {
     const pool = await getPool();
     const pid  = req.params.id;
+    await reconcileProjectSourceStatuses(pool, pid);
 
     const counts = {};
     for (const [key, table] of [
