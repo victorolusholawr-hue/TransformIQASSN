@@ -29,10 +29,9 @@
       headers.set('X-Requested-With', 'XMLHttpRequest');
       var method = (init.method || 'GET').toUpperCase();
       if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+        headers.set('X-CSRF-Token', window.tiqCsrfToken);
         if (init.body instanceof FormData) {
           if (!init.body.has('_csrf')) init.body.append('_csrf', window.tiqCsrfToken);
-        } else {
-          headers.set('X-CSRF-Token', window.tiqCsrfToken);
         }
       }
       init.headers = headers;
