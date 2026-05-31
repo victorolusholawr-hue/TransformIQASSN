@@ -51,7 +51,7 @@ UPDATE dbo.Users SET role = 'admin' WHERE email = 'you@example.com';
 | `SESSION_SECRET` | Express session key (min 32 chars) |
 | `DB_PASSWORD` | SQL Server SA password |
 | `ANTHROPIC_API_KEY` | Claude API key (`sk-ant-...`) |
-| `ANTHROPIC_MODEL` | Claude model ID (default `claude-sonnet-4-6`) |
+| `ANTHROPIC_MODEL` | Claude model ID (default `claude-opus-4-7`) |
 | `AZURE_STORAGE_CONNECTION_STRING` | Azure Blob — leave blank for local dev |
 
 See [`.env.example`](.env.example) for the full list.

@@ -2,7 +2,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { getPool, sql } = require('../config/database');
 
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_MODEL = 'claude-opus-4-7';
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
 const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
@@ -85,6 +85,14 @@ RULE: systems = SOFTWARE, DATABASES, PLATFORMS, TOOLS, IT INFRASTRUCTURE only (n
 
 kpis items:
 { "name": str, "description": str, "target_value": str, "measurement_method": str, "frequency": "daily"|"weekly"|"monthly"|"quarterly"|"yearly", "owner": str, "confidence": 0.0-1.0, "source_quote": str }
+
+GROUNDING RULES — MANDATORY:
+- Extract ONLY entities that are explicitly and clearly present in the provided source text.
+- Do NOT infer, assume, or fabricate any entity, field value, or detail not directly supported by the text.
+- Every entity MUST include a source_quote — a verbatim fragment (≤150 chars) copied directly from the source. If you cannot find a verbatim supporting quote, DO NOT include the entity.
+- Set confidence < 0.5 for anything that requires interpretation beyond what is written; set ≥ 0.8 only when the text states it unambiguously.
+- If the text does not contain a particular entity type, omit that key entirely from the JSON.
+- Never invent stakeholder names, system names, KPI targets, or requirement descriptions not found in the text.
 
 IMPORTANT:
 - confidence must be a float between 0.0 and 1.0

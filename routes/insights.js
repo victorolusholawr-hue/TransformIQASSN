@@ -7,7 +7,15 @@ const { projectAccessRequired }          = require('../middleware/projectAccess'
 const { callClaudeStructured, summariseEntities, logUsage, isRateLimited } = require('../services/ai');
 const router = express.Router();
 
-const SYSTEM_PROMPT = 'You are an expert Business Analyst and transformation consultant. Return valid JSON only. No markdown fences.';
+const SYSTEM_PROMPT = `You are an expert Business Analyst and transformation consultant.
+
+GROUNDING RULES — MANDATORY:
+- Base ALL outputs exclusively on the project entities and descriptions provided in the user message.
+- Do NOT introduce requirements, risks, processes, stakeholders, systems, or KPIs that are not listed in the input.
+- Do NOT pad outputs with generic industry advice or placeholder content not supported by the input.
+- If the provided data is sparse for a section, produce fewer but accurate items rather than fabricating content.
+- All recommendations, phases, and transformations MUST be directly traceable to the input entities.
+- Return valid JSON only. No markdown fences.`;
 
 function jsonError(res, status, message) {
   return res.status(status).json({ error: message });
