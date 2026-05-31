@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="<%= csrfToken %>">
   <title><%= typeof title !== 'undefined' ? title + ' — TransformIQ' : 'TransformIQ' %></title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -19,6 +20,41 @@
         document.documentElement.setAttribute('data-theme', 'light');
       }
     })();
+    window.tiqCsrfToken = '<%= csrfToken %>';
+    window.tiqFetchJson = function(input, init) {
+      init = init || {};
+      var headers = new Headers(init.headers || {});
+      headers.set('Accept', 'application/json');
+      headers.set('X-Requested-With', 'XMLHttpRequest');
+      var method = (init.method || 'GET').toUpperCase();
+      if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+        if (init.body instanceof FormData) {
+          if (!init.body.has('_csrf')) init.body.append('_csrf', window.tiqCsrfToken);
+        } else {
+          headers.set('X-CSRF-Token', window.tiqCsrfToken);
+        }
+      }
+      init.headers = headers;
+      return window.fetch(input, init).then(function(res) {
+        var contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          return res.text().then(function() {
+            var err = new Error('Your session or security token may have expired. Please reload the page and try again.');
+            err.status = res.status;
+            throw err;
+          });
+        }
+        return res.json().then(function(data) {
+          if (!res.ok) {
+            var err = new Error((data && data.error) || ('Request failed with HTTP ' + res.status + '.'));
+            err.status = res.status;
+            err.data = data;
+            throw err;
+          }
+          return data;
+        });
+      });
+    };
   </script>
 </head>
 <body>
@@ -34,17 +70,24 @@
 
 <script>
 function toggleTheme(){
-  const h = document.documentElement;
-  const next = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  h.setAttribute('data-theme', next);
-  const btn = document.querySelector('.theme-btn');
-  if(btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
-  localStorage.setItem('theme', next);
+  try {
+    const h    = document.documentElement;
+    const next = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    h.setAttribute('data-theme', next);
+    document.querySelectorAll('.theme-btn').forEach(function(btn){
+      btn.textContent = next === 'dark' ? '☀️' : '🌙';
+      btn.title = next === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+    });
+    try { localStorage.setItem('theme', next); } catch(_) {}
+  } catch(e) { console.warn('[theme] toggle error', e); }
 }
 // Sync button icon on load
 document.addEventListener('DOMContentLoaded', function(){
-  const btn = document.querySelector('.theme-btn');
-  if(btn) btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙';
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.querySelectorAll('.theme-btn').forEach(function(btn){
+    btn.textContent = isDark ? '☀️' : '🌙';
+    btn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+  });
 });
 </script>
 </body>

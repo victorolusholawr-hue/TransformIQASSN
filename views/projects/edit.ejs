@@ -4,7 +4,7 @@
     <a href="/projects/<%= project.id %>" class="btn-outline">Cancel</a>
   </div>
 
-  <form method="POST" action="/projects/<%= project.id %>/edit" class="card">
+  <form method="POST" action="/projects/<%= project.id %>/edit" class="card" id="project-edit-form">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 
     <div class="form-group">
@@ -19,15 +19,15 @@
 
     <div class="form-group">
       <label class="form-label">Tags <span class="form-hint">(comma-separated)</span></label>
-      <input type="text" name="tags" class="form-input" value="<%= (() => { try { return JSON.parse(project.tags || '[]').join(', '); } catch(e) { return ''; } })() %>">
+      <input type="text" name="tags" class="form-input" value="<%= Array.isArray(project.tags) ? project.tags.join(', ') : (() => { try { return JSON.parse(project.tags || '[]').join(', '); } catch(e) { return ''; } })() %>">
     </div>
 
     <div class="form-actions">
       <button type="submit" class="btn-primary">Save Changes</button>
-      <form method="POST" action="/projects/<%= project.id %>/archive" style="display:inline;">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <button type="submit" class="btn-outline" onclick="return confirm('Archive this project?')">Archive</button>
-      </form>
+      <button type="submit" class="btn-outline" form="project-archive-form" onclick="return confirm('Archive this project?')">Archive</button>
     </div>
+  </form>
+  <form method="POST" action="/projects/<%= project.id %>/archive" id="project-archive-form" hidden>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   </form>
 </div>

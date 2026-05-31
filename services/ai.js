@@ -299,6 +299,7 @@ async function summariseEntities(projectId) {
 
 module.exports = {
   callClaude,
+  extractChunk,
   extractAllChunks,
   callClaudeStructured,
   logUsage,

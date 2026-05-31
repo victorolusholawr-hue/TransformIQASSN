@@ -16,6 +16,23 @@ const ENTITY_MAP = {
   kpis:           { table: 'KPIs',           nameCol: 'name',   hasStatus: false },
 };
 
+// Compatibility with the original TransformIQ slug.
+router.get('/projects/:projectId/business-rules', loginRequired, (req, res) => {
+  res.redirect(301, `/projects/${req.params.projectId}/business_rules`);
+});
+
+router.get('/projects/:projectId/business-rules/:eid', loginRequired, (req, res) => {
+  res.redirect(301, `/projects/${req.params.projectId}/business_rules/${req.params.eid}`);
+});
+
+router.post('/projects/:projectId/business-rules/:eid/edit', analystRequired, (req, res) => {
+  res.redirect(307, `/projects/${req.params.projectId}/business_rules/${req.params.eid}/edit`);
+});
+
+router.post('/projects/:projectId/business-rules/:eid/delete', analystRequired, (req, res) => {
+  res.redirect(307, `/projects/${req.params.projectId}/business_rules/${req.params.eid}/delete`);
+});
+
 // ── List ─────────────────────────────────────────────────────
 router.get('/projects/:projectId/:type(requirements|stakeholders|processes|decisions|risks|business_rules|systems|kpis)',
   loginRequired, projectAccessRequired,
@@ -161,8 +178,9 @@ router.post('/projects/:projectId/requirements/:eid/reject', analystRequired, pr
 });
 
 router.post('/projects/:projectId/requirements/bulk-action', analystRequired, projectAccessRequired, async (req, res) => {
-  const { action, ids } = req.body;
-  const idList = Array.isArray(ids) ? ids : [ids];
+  const { action } = req.body;
+  const ids = req.body['entity_ids[]'] || req.body.entity_ids || req.body.ids;
+  const idList = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
   if (!idList.length) { return res.redirect(`/projects/${req.params.projectId}/requirements`); }
   const newStatus = action === 'confirm' ? 'confirmed' : 'rejected';
   const pool = await getPool();

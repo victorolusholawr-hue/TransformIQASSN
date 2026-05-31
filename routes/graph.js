@@ -16,25 +16,31 @@ router.get('/projects/:projectId/graph/data', loginRequired, projectAccessRequir
 });
 
 router.get('/projects/:projectId/traceability', loginRequired, projectAccessRequired, async (req, res) => {
-  const pool = await getPool();
-  const pid  = req.params.projectId;
+  try {
+    const pool = await getPool();
+    const pid  = req.params.projectId;
 
-  const reqs = await pool.request().input('pid', sql.UniqueIdentifier, pid)
-    .query('SELECT id, title FROM dbo.Requirements WHERE project_id=@pid');
-  const syss = await pool.request().input('pid', sql.UniqueIdentifier, pid)
-    .query('SELECT id, name FROM dbo.Systems WHERE project_id=@pid');
-  const edges = await pool.request().input('pid', sql.UniqueIdentifier, pid)
-    .query("SELECT source_node_id, target_node_id FROM dbo.GraphEdges WHERE project_id=@pid");
+    const reqs = await pool.request().input('pid', sql.UniqueIdentifier, pid)
+      .query('SELECT id, title FROM dbo.Requirements WHERE project_id=@pid');
+    const syss = await pool.request().input('pid', sql.UniqueIdentifier, pid)
+      .query('SELECT id, name FROM dbo.Systems WHERE project_id=@pid');
+    const edges = await pool.request().input('pid', sql.UniqueIdentifier, pid)
+      .query("SELECT source_node_id, target_node_id FROM dbo.GraphEdges WHERE project_id=@pid");
 
-  const edgeSet = new Set(edges.recordset.map(e => `${e.source_node_id}:${e.target_node_id}`));
+    const edgeSet = new Set(edges.recordset.map(e => `${e.source_node_id}:${e.target_node_id}`));
 
-  res.render('graph/traceability', {
-    title:        'Traceability Matrix',
-    project:      req.project,
-    requirements: reqs.recordset,
-    systems:      syss.recordset,
-    edgeSet,
-  });
+    res.render('graph/traceability', {
+      title:        'Traceability Matrix',
+      project:      req.project,
+      requirements: reqs.recordset,
+      systems:      syss.recordset,
+      edgeSet,
+    });
+  } catch (err) {
+    console.error('[traceability]', err);
+    req.flash('error', 'Failed to load traceability matrix.');
+    res.redirect(`/projects/${req.params.projectId}`);
+  }
 });
 
 module.exports = router;

@@ -1,17 +1,24 @@
 <div class="container">
   <div class="page-header">
-    <h1>Upload Source</h1>
-    <a href="/projects/<%= project.id %>" class="btn-outline">← Back to Project</a>
+    <div>
+      <h1>Upload Source</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <a href="/projects/<%= project.id %>/sources" class="btn-outline">View all sources →</a>
   </div>
 
   <% if (last) { %>
-    <div class="notice notice-success">
+    <div class="notice notice-success" style="margin-bottom:20px;">
       <strong>✓ Uploaded:</strong> <%= last.name %>
       <span class="extraction-status">
         <% if (last.ai_status === 'done') { %>
           · AI extraction complete
         <% } else if (last.extraction_status === 'done') { %>
-          · Text extracted. <a href="/sources/<%= last.id %>/extract" onclick="return confirm('Extract entities with AI?')">Extract with AI →</a>
+          · Text extracted.
+          <form method="POST" action="/sources/<%= last.id %>/extract" style="display:inline;">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="link-button" onclick="return confirm('Extract entities with AI?')">Extract with AI →</button>
+          </form>
         <% } else { %>
           · <a href="/sources/<%= last.id %>">View source</a>
         <% } %>
@@ -20,41 +27,51 @@
   <% } %>
 
   <div class="card">
-    <form method="POST" action="/projects/<%= project.id %>/sources/upload" enctype="multipart/form-data" id="upload-form">
+    <form method="POST" action="/projects/<%= project.id %>/sources/upload?_csrf=<%= csrfToken %>" enctype="multipart/form-data" id="upload-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-
-      <div class="form-group">
-        <label class="form-label">Source Type</label>
-        <select name="source_type" class="form-input">
-          <option value="">Select type...</option>
-          <option value="requirements">Requirements Document</option>
-          <option value="process">Process Document</option>
-          <option value="stakeholder">Stakeholder Register</option>
-          <option value="meeting_notes">Meeting Notes</option>
-          <option value="report">Report</option>
-          <option value="policy">Policy / Procedure</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
 
       <div class="form-group">
         <label class="form-label">File *</label>
         <div class="drop-zone" id="drop-zone">
           <div class="drop-zone-icon">📁</div>
           <p class="drop-zone-text">Drag & drop or <label for="file-input" class="drop-zone-link">browse</label></p>
-          <p class="drop-zone-hint">PDF, DOCX, XLSX, PPTX, TXT, PNG, JPG — max 100 MB</p>
+          <p class="drop-zone-hint">Supported: PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), plain text (.txt), images (.png, .jpg)</p>
           <input type="file" id="file-input" name="file" accept=".pdf,.docx,.xlsx,.xls,.txt,.pptx,.png,.jpg,.jpeg,.webp,.gif" required style="display:none;">
           <div id="file-name" class="drop-zone-selected" style="display:none;"></div>
         </div>
       </div>
 
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Source Type</label>
+          <select name="source_type" class="form-input">
+            <option value="">Select type...</option>
+            <option value="meeting_transcript">Meeting Transcript</option>
+            <option value="document">Document</option>
+            <option value="presentation">Presentation</option>
+            <option value="spreadsheet">Spreadsheet</option>
+            <option value="image">Image/Screenshot</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Participants (comma-separated)</label>
+          <input type="text" name="participants" class="form-input" placeholder="Jane Smith, John Doe">
+        </div>
+      </div>
+
       <div class="form-actions">
-        <button type="submit" class="btn-primary" id="upload-btn">Upload Source</button>
+        <button type="submit" class="btn-primary" id="upload-btn">Upload &amp; Extract Text</button>
+        <a href="/projects/<%= project.id %>" class="btn-outline">Cancel</a>
       </div>
     </form>
   </div>
 
-  <a href="/projects/<%= project.id %>/sources" class="alt-link">View all sources →</a>
+  <div class="notice notice-info" style="margin-top:20px;">
+    <strong>What happens next:</strong> After upload, text is extracted automatically for documents.
+    For <strong>images</strong>, Claude Vision runs when you click <strong>Extract with AI</strong> (this may take 30–60 s).
+    You can then extract Requirements, Stakeholders, Processes, Risks, and more.
+  </div>
 </div>
 
 <script>

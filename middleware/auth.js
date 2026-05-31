@@ -9,7 +9,7 @@ async function _userExists(userId) {
       .query('SELECT id FROM dbo.Users WHERE id = @id');
     return result.recordset.length > 0;
   } catch (_) {
-    return false;
+    return true;
   }
 }
 

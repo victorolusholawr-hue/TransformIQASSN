@@ -2,7 +2,9 @@
   <div class="page-header">
     <h1>Sources</h1>
     <div class="header-actions">
-      <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary">+ Upload</a>
+      <% if (member.role !== 'viewer') { %>
+        <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary">+ Upload</a>
+      <% } %>
       <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
     </div>
   </div>
@@ -10,7 +12,9 @@
   <% if (!sources.length) { %>
     <div class="empty-state">
       <p>No sources yet. Upload a document to start extracting entities.</p>
-      <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary" style="margin-top:16px;">Upload First Source</a>
+      <% if (member.role !== 'viewer') { %>
+        <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary" style="margin-top:16px;">Upload First Source</a>
+      <% } %>
     </div>
   <% } else { %>
     <div class="sources-list">
@@ -30,6 +34,7 @@
               <span class="source-date"><%= new Date(s.created_at).toLocaleDateString() %></span>
             </div>
           </div>
+          <% if (member.role !== 'viewer') { %>
           <div class="source-item-actions">
             <% if (s.ai_status !== 'done' && s.extraction_status === 'done') { %>
               <form method="POST" action="/sources/<%= s.id %>/extract" style="display:inline;">
@@ -42,6 +47,7 @@
               <button type="submit" class="btn-sm btn-danger" onclick="return confirm('Delete this source?')">Delete</button>
             </form>
           </div>
+          <% } %>
         </div>
       <% } %>
     </div>

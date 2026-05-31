@@ -10,9 +10,16 @@ const router = express.Router();
 
 router.get('/projects/:projectId/export', analystRequired, projectAccessRequired, async (req, res) => {
   const pool = await getPool();
-  const docs = await pool.request().input('pid', sql.UniqueIdentifier, req.params.projectId)
+  const documentsResult = await pool.request().input('pid', sql.UniqueIdentifier, req.params.projectId)
     .query('SELECT * FROM dbo.Documents WHERE project_id=@pid ORDER BY generated_at DESC');
-  res.render('export/index', { title: 'Export', project: req.project, docs: docs.recordset });
+  const futureState = await pool.request().input('pid', sql.UniqueIdentifier, req.params.projectId)
+    .query("SELECT TOP 1 content FROM dbo.AIInsights WHERE project_id=@pid AND type='future_state'");
+  res.render('export/index', {
+    title: 'Export',
+    project: req.project,
+    documents: documentsResult.recordset,
+    futureStateInsight: futureState.recordset[0] || null,
+  });
 });
 
 async function doExport(res, req, docType, bufferFn, filename) {

@@ -59,7 +59,7 @@
       <span>Risks</span>
       <span class="sidebar-badge"><%= counts.risks %></span>
     </a>
-    <a href="/projects/<%= project.id %>/business_rules" class="sidebar-link">
+    <a href="/projects/<%= project.id %>/business-rules" class="sidebar-link">
       <span class="sidebar-link-icon ec-business-rules">📏</span>
       <span>Business Rules</span>
       <span class="sidebar-badge"><%= counts.business_rules %></span>
@@ -145,11 +145,13 @@
     <div class="sidebar-divider"></div>
 
     <!-- Export -->
-    <div class="sidebar-section-label">Export</div>
-    <a href="/projects/<%= project.id %>/export" class="sidebar-link">
-      <span class="sidebar-link-icon" style="background:rgba(72,162,63,0.12);color:#48a23f;">📤</span>
-      <span>Export Documents</span>
-    </a>
+    <% if (member.role !== 'viewer') { %>
+      <div class="sidebar-section-label">Export</div>
+      <a href="/projects/<%= project.id %>/export" class="sidebar-link">
+        <span class="sidebar-link-icon" style="background:rgba(72,162,63,0.12);color:#48a23f;">📤</span>
+        <span>Export Documents</span>
+      </a>
+    <% } %>
   </aside>
 
   <!-- ── Main Content ──────────────────────────────────────────────── -->
@@ -165,8 +167,22 @@
         <% if (member.role !== 'viewer') { %>
           <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary btn-sm">+ Upload Source</a>
           <a href="/projects/<%= project.id %>/edit" class="btn-outline btn-sm">Edit Project</a>
+          <button type="button" class="btn-outline btn-sm" id="recalibrateBtn">Recalibrate</button>
+          <% if (project.status === 'archived') { %>
+            <form method="POST" action="/projects/<%= project.id %>/restore" style="display:inline;">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit" class="btn-primary btn-sm">Restore</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/projects/<%= project.id %>/archive" style="display:inline;">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit" class="btn-outline btn-sm" onclick="return confirm('Archive this project? It will be hidden from your dashboard.')">Archive</button>
+            </form>
+          <% } %>
         <% } %>
-        <a href="/projects/<%= project.id %>/export" class="btn-outline btn-sm">Export</a>
+        <% if (member.role !== 'viewer') { %>
+          <a href="/projects/<%= project.id %>/export" class="btn-outline btn-sm">Export</a>
+        <% } %>
         <% if (member.role === 'owner') { %>
           <form method="POST" action="/projects/<%= project.id %>/delete" style="display:inline;">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -185,12 +201,12 @@
         { key:'processes',      label:'Processes',      icon:'⚙️',  iconClass:'ec-processes'     },
         { key:'decisions',      label:'Decisions',      icon:'✅', iconClass:'ec-decisions'     },
         { key:'risks',          label:'Risks',          icon:'⚠️', iconClass:'ec-risks'         },
-        { key:'business_rules', label:'Business Rules', icon:'📏', iconClass:'ec-business-rules'},
+        { key:'business_rules', href:'business-rules', label:'Business Rules', icon:'📏', iconClass:'ec-business-rules'},
         { key:'systems',        label:'Systems',        icon:'🖥️', iconClass:'ec-systems'       },
         { key:'kpis',           label:'KPIs',           icon:'📊', iconClass:'ec-kpis'          },
       ]; %>
       <% for (const et of entityTypes) { %>
-        <a href="/projects/<%= project.id %>/<%= et.key %>" class="entity-card">
+        <a href="/projects/<%= project.id %>/<%= et.href || et.key %>" class="entity-card">
           <div class="entity-card-icon <%= et.iconClass %>"><%= et.icon %></div>
           <div class="entity-card-count"><%= counts[et.key] %></div>
           <div class="entity-card-label"><%= et.label %></div>
@@ -198,13 +214,27 @@
       <% } %>
     </div>
 
+    <% const totalEntities = counts.requirements + counts.stakeholders + counts.processes + counts.decisions + counts.risks + counts.business_rules + counts.systems + counts.kpis; %>
+    <% if (totalEntities > 0 || counts.sources > 0) { %>
+    <div class="charts-grid" style="margin-bottom:20px;">
+      <div class="chart-card">
+        <h3>Entity Distribution</h3>
+        <div class="chart-canvas-wrap"><canvas id="entityChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Source Extraction Status</h3>
+        <div class="chart-canvas-wrap"><canvas id="sourceChart"></canvas></div>
+      </div>
+    </div>
+    <% } %>
+
     <!-- Team Members -->
     <div class="section">
       <div class="section-header">
         <h3>Team Members</h3>
         <% if (member.role === 'owner') { %>
           <button class="btn-sm btn-outline"
-            onclick="document.getElementById('invite-form').style.display='block';this.style.display='none'">
+            onclick="var f=document.getElementById('invite-form');f.style.display='block';f.scrollIntoView({behavior:'smooth',block:'nearest'});this.style.display='none'">
             + Invite Member
           </button>
         <% } %>
@@ -225,7 +255,8 @@
               <option value="viewer">Viewer</option>
             </select>
           </div>
-          <button type="submit" class="btn-primary">Invite</button>
+          <button type="submit" class="btn-primary">Send Invite</button>
+          <p class="form-hint" style="width:100%;margin-top:4px;">The person must already have a TransformIQ account.</p>
         </form>
       </div>
 
@@ -251,5 +282,150 @@
       </div>
     </div>
 
+    <!-- Recent sources -->
+    <div class="section">
+      <div class="section-header">
+        <h3>Recent Sources</h3>
+        <a href="/projects/<%= project.id %>/sources" class="btn-outline btn-sm">View all</a>
+      </div>
+      <% if (recentSources && recentSources.length) { %>
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Words</th>
+              <th>AI Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% for (const s of recentSources) { let meta = {}; try { meta = JSON.parse(s.metadata || '{}'); } catch (_) {} %>
+              <tr>
+                <td><strong><%= s.name %></strong></td>
+                <td><span class="badge-muted"><%= s.source_type || 'document' %></span></td>
+                <td><%= meta.word_count || '—' %></td>
+                <td>
+                  <span class="<%= s.ai_status === 'done' ? 'badge-success' : s.ai_status === 'processing' ? 'badge-warning' : s.ai_status === 'failed' ? 'badge-danger' : 'badge-muted' %>">
+                    <%= s.ai_status === 'done' ? 'Extracted' : s.ai_status === 'processing' ? 'Processing' : s.ai_status === 'failed' ? 'Failed' : 'Pending' %>
+                  </span>
+                </td>
+                <td><a href="/sources/<%= s.id %>" class="btn-outline btn-sm">View</a></td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      <% } else { %>
+        <div class="empty-state"><p>No sources yet. <a href="/projects/<%= project.id %>/sources/upload">Upload your first source.</a></p></div>
+      <% } %>
+    </div>
+
+    <% if (counts.requirements === 0 && counts.sources > 0) { %>
+      <div class="notice notice-warning" style="margin-bottom:20px;">
+        <strong>Sources uploaded but no entities extracted yet.</strong>
+        Open a source and click "Extract with AI" to analyse it.
+      </div>
+    <% } %>
+
   </main>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  const recalibrateBtn = document.getElementById('recalibrateBtn');
+  if (recalibrateBtn) {
+    recalibrateBtn.addEventListener('click', function(){
+      if (!confirm('Re-extract all completed sources using the latest AI prompt? This will update all extracted entities for this project.')) return;
+      const btn = this;
+      btn.disabled = true;
+      window.tiqFetchJson('/projects/<%= project.id %>/sources/done-ids')
+        .then(function(data){
+          const ids = data.source_ids || [];
+          if (!ids.length) {
+            alert('No extracted sources found for this project.');
+            btn.disabled = false;
+            btn.textContent = 'Recalibrate';
+            return;
+          }
+          let i = 0;
+          function extractSource(id, label) {
+            const init = new FormData();
+            init.append('phase', 'init');
+            return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: init })
+              .then(function(meta){
+                const total = meta.chunks_total || 0;
+                function chunk(idx) {
+                  if (idx >= total) return Promise.resolve();
+                  btn.textContent = label + ' section ' + (idx + 1) + '/' + total + '...';
+                  const f = new FormData();
+                  f.append('phase', 'chunk');
+                  f.append('chunk_idx', String(idx));
+                  return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: f })
+                    .then(function(){ return chunk(idx + 1); });
+                }
+                return chunk(0);
+              });
+          }
+          function next() {
+            if (i >= ids.length) {
+              btn.textContent = 'Done - reloading...';
+              setTimeout(function(){ location.reload(); }, 800);
+              return;
+            }
+            btn.textContent = 'Recalibrating ' + (i + 1) + '/' + ids.length + '...';
+            extractSource(ids[i], 'Recalibrating ' + (i + 1) + '/' + ids.length)
+              .then(function(){ i++; next(); })
+              .catch(function(err){
+                alert(err.message || 'Extraction failed.');
+                btn.disabled = false;
+                btn.textContent = 'Recalibrate';
+              });
+          }
+          next();
+        })
+        .catch(function(err){
+          alert(err.message || 'Could not fetch source list. Please try again.');
+          btn.disabled = false;
+          btn.textContent = 'Recalibrate';
+        });
+    });
+  }
+
+  const entityCtx = document.getElementById('entityChart');
+  const sourceCtx = document.getElementById('sourceChart');
+  if (window.Chart && entityCtx) {
+    const counts = [
+      <%= counts.requirements %>, <%= counts.stakeholders %>, <%= counts.processes %>, <%= counts.decisions %>,
+      <%= counts.risks %>, <%= counts.business_rules %>, <%= counts.systems %>, <%= counts.kpis %>
+    ];
+    const labels = ['Requirements','Stakeholders','Processes','Decisions','Risks','Business Rules','Systems','KPIs'];
+    const colors = ['#72246c','#41b6e6','#48a23f','#f0b323','#dc6b2f','#c2188b','#3a5dae','#0D9488'];
+    const filteredLabels = labels.filter(function(_, i){ return counts[i] > 0; });
+    const filteredCounts = counts.filter(function(v){ return v > 0; });
+    const filteredColors = colors.filter(function(_, i){ return counts[i] > 0; });
+    if (filteredCounts.length) {
+      new Chart(entityCtx, {
+        type: 'doughnut',
+        data: { labels: filteredLabels, datasets: [{ data: filteredCounts, backgroundColor: filteredColors }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+      });
+    }
+  }
+  if (window.Chart && sourceCtx) {
+    const sourceStatuses = <%- JSON.stringify(sourceStatusCounts || {}) %>;
+    new Chart(sourceCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Pending','Processing','Extracted','Failed'],
+        datasets: [{
+          data: [sourceStatuses.pending || 0, sourceStatuses.processing || 0, sourceStatuses.done || 0, sourceStatuses.failed || 0],
+          backgroundColor: ['#97999b','#f0b323','#48a23f','#dc6b2f'],
+          borderRadius: 6
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { precision: 0 } } } }
+    });
+  }
+})();
+</script>

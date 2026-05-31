@@ -1,93 +1,167 @@
 <div class="container">
   <div class="page-header">
-    <h1>📋 Requirements <span class="count-badge"><%= entities.length %></span></h1>
-    <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+    <div>
+      <h1>Requirements <span class="count-badge"><%= entities.length %></span></h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <div class="header-actions">
+      <% if (member.role !== 'viewer') { %>
+        <a href="/projects/<%= project.id %>/sources/upload" class="btn-outline">+ Upload Source</a>
+      <% } %>
+      <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+    </div>
   </div>
 
-  <!-- Filters -->
-  <form method="GET" class="filter-bar">
-    <select name="req_type"       class="form-input filter-input" onchange="this.form.submit()">
-      <option value="">All Types</option>
-      <option value="functional"    <%= filters.req_type==='functional'?'selected':'' %>>Functional</option>
-      <option value="non-functional"<%= filters.req_type==='non-functional'?'selected':'' %>>Non-functional</option>
-    </select>
-    <select name="priority"       class="form-input filter-input" onchange="this.form.submit()">
-      <option value="">All Priorities</option>
-      <option value="high"  <%= filters.priority==='high'  ?'selected':'' %>>High</option>
-      <option value="medium"<%= filters.priority==='medium'?'selected':'' %>>Medium</option>
-      <option value="low"   <%= filters.priority==='low'   ?'selected':'' %>>Low</option>
-    </select>
-    <select name="status"         class="form-input filter-input" onchange="this.form.submit()">
-      <option value="">All Statuses</option>
-      <option value="pending"  <%= filters.status==='pending'  ?'selected':'' %>>Pending</option>
-      <option value="confirmed"<%= filters.status==='confirmed'?'selected':'' %>>Confirmed</option>
-      <option value="rejected" <%= filters.status==='rejected' ?'selected':'' %>>Rejected</option>
-    </select>
-    <input type="number" name="confidence_min" class="form-input filter-input"
-      placeholder="Min confidence (0–1)" step="0.1" min="0" max="1"
-      value="<%= filters.confidence_min || '' %>" style="width:180px;">
-    <button type="submit" class="btn-outline btn-sm">Filter</button>
-    <a href="/projects/<%= project.id %>/requirements" class="btn-outline btn-sm">Clear</a>
+  <% const needsReview = entities.filter(e => e.needs_review); %>
+  <% if (needsReview.length) { %>
+    <div class="notice notice-warning" style="margin-bottom:16px;">
+      <strong><%= needsReview.length %> requirement(s) flagged as possible duplicates.</strong>
+      Review them below and confirm or reject.
+    </div>
+  <% } %>
+
+  <form method="GET" action="/projects/<%= project.id %>/requirements" id="filterForm">
+    <div class="filter-bar">
+      <label>Priority:</label>
+      <select name="priority" class="form-input filter-input" onchange="this.form.submit()">
+        <option value="">All</option>
+        <option value="high" <%= filters.priority === 'high' ? 'selected' : '' %>>High</option>
+        <option value="medium" <%= filters.priority === 'medium' ? 'selected' : '' %>>Medium</option>
+        <option value="low" <%= filters.priority === 'low' ? 'selected' : '' %>>Low</option>
+      </select>
+      <span class="filter-sep"></span>
+      <label>Type:</label>
+      <select name="req_type" class="form-input filter-input" onchange="this.form.submit()">
+        <option value="">All</option>
+        <option value="functional" <%= filters.req_type === 'functional' ? 'selected' : '' %>>Functional</option>
+        <option value="non-functional" <%= filters.req_type === 'non-functional' ? 'selected' : '' %>>Non-functional</option>
+      </select>
+      <span class="filter-sep"></span>
+      <label>Status:</label>
+      <select name="status" class="form-input filter-input" onchange="this.form.submit()">
+        <option value="">All</option>
+        <option value="pending" <%= filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
+        <option value="confirmed" <%= filters.status === 'confirmed' ? 'selected' : '' %>>Confirmed</option>
+        <option value="rejected" <%= filters.status === 'rejected' ? 'selected' : '' %>>Rejected</option>
+      </select>
+      <span class="filter-sep"></span>
+      <label>Min confidence:</label>
+      <input type="range" name="confidence_min" min="0" max="1" step="0.1"
+        value="<%= filters.confidence_min || '0' %>"
+        oninput="document.getElementById('confVal').textContent=parseFloat(this.value).toFixed(1)"
+        onchange="this.form.submit()">
+      <span class="filter-confidence-val" id="confVal"><%= Number(filters.confidence_min || 0).toFixed(1) %></span>
+      <% if (filters.priority || filters.req_type || filters.status || filters.confidence_min) { %>
+        <a href="/projects/<%= project.id %>/requirements" class="btn-outline btn-sm">Clear</a>
+      <% } %>
+    </div>
   </form>
 
   <% if (!entities.length) { %>
-    <div class="empty-state"><p>No requirements yet. Upload a source and extract entities.</p></div>
-  <% } else { %>
-    <!-- Bulk actions -->
-    <% if (member.role !== 'viewer') { %>
-    <form method="POST" action="/projects/<%= project.id %>/requirements/bulk-action" id="bulk-form">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <div class="bulk-bar">
-        <label><input type="checkbox" id="select-all"> Select all</label>
-        <button type="submit" name="action" value="confirm" class="btn-sm btn-primary">✓ Confirm selected</button>
-        <button type="submit" name="action" value="reject"  class="btn-sm btn-danger" >✗ Reject selected</button>
-      </div>
-    <% } %>
-
-    <div class="entity-list">
-      <% for (const e of entities) { %>
-        <div class="entity-item entity-item-indigo">
-          <% if (member.role !== 'viewer') { %>
-            <input type="checkbox" name="ids" value="<%= e.id %>" form="bulk-form" class="entity-check">
-          <% } %>
-          <div class="entity-item-body">
-            <div class="entity-item-header">
-              <a href="/projects/<%= project.id %>/requirements/<%= e.id %>" class="entity-title"><%= e.title %></a>
-              <div class="entity-badges">
-                <% if (e.req_type) { %><span class="badge-info"><%= e.req_type %></span><% } %>
-                <% if (e.priority) { %>
-                  <span class="badge-<%= e.priority === 'high' ? 'danger' : e.priority === 'medium' ? 'warning' : 'muted' %>"><%= e.priority %></span>
-                <% } %>
-                <span class="badge-<%= e.status === 'confirmed' ? 'success' : e.status === 'rejected' ? 'danger' : 'muted' %>"><%= e.status %></span>
-                <% if (e.confidence) { %><span class="confidence-badge"><%= Math.round(e.confidence * 100) %>%</span><% } %>
-              </div>
-            </div>
-            <% if (e.description) { %><p class="entity-desc"><%= e.description.slice(0, 200) %><%= e.description.length > 200 ? '...' : '' %></p><% } %>
-          </div>
-          <% if (member.role !== 'viewer') { %>
-          <div class="entity-actions">
-            <form method="POST" action="/projects/<%= project.id %>/requirements/<%= e.id %>/confirm" style="display:inline;">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button type="submit" class="btn-sm btn-primary" title="Confirm">✓</button>
-            </form>
-            <form method="POST" action="/projects/<%= project.id %>/requirements/<%= e.id %>/reject" style="display:inline;">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button type="submit" class="btn-sm btn-danger" title="Reject">✗</button>
-            </form>
-            <form method="POST" action="/projects/<%= project.id %>/requirements/<%= e.id %>/delete" style="display:inline;">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button type="submit" class="btn-sm btn-danger" onclick="return confirm('Delete?')">🗑</button>
-            </form>
-          </div>
-          <% } %>
-        </div>
+    <div class="card empty-state">
+      <p>
+        <% if (filters.priority || filters.req_type || filters.status || filters.confidence_min) { %>
+          No requirements match your current filters. <a href="/projects/<%= project.id %>/requirements">Clear filters</a>
+        <% } else { %>
+          No requirements extracted yet. Upload a source and run AI extraction.
+        <% } %>
+      </p>
+      <% if (member.role !== 'viewer' && !(filters.priority || filters.req_type || filters.status || filters.confidence_min)) { %>
+        <a href="/projects/<%= project.id %>/sources/upload" class="btn-primary" style="margin-top:16px;">Upload Source</a>
       <% } %>
     </div>
-    <% if (member.role !== 'viewer') { %></form><% } %>
+  <% } else { %>
+    <% if (member.role !== 'viewer') { %>
+      <form method="POST" action="/projects/<%= project.id %>/requirements/bulk-action" id="bulkForm">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="bulk-toolbar" id="bulkToolbar">
+          <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+          <button type="submit" name="action" value="confirm" class="btn-primary btn-sm">Confirm Selected</button>
+          <button type="submit" name="action" value="reject" class="btn-danger btn-sm">Reject Selected</button>
+        </div>
+      </form>
+    <% } %>
+
+    <div class="section">
+      <table class="students-table entity-table">
+        <thead>
+          <tr>
+            <% if (member.role !== 'viewer') { %>
+              <th class="col-check"><input type="checkbox" class="entity-checkbox" id="selectAll" title="Select all"></th>
+            <% } %>
+            <th>Title</th>
+            <th>Type</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Confidence</th>
+            <% if (member.role !== 'viewer') { %><th></th><% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const e of entities) { %>
+            <tr>
+              <% if (member.role !== 'viewer') { %>
+                <td class="col-check">
+                  <input type="checkbox" class="entity-checkbox row-check" name="entity_ids[]" value="<%= e.id %>" form="bulkForm">
+                </td>
+              <% } %>
+              <td>
+                <div class="cell-title">
+                  <a href="/projects/<%= project.id %>/requirements/<%= e.id %>"><%= e.title %></a>
+                  <% if (e.needs_review) { %><span class="badge-warning" style="margin-left:6px;">Review</span><% } %>
+                </div>
+                <% if (e.description) { %><div class="cell-meta"><%= e.description.slice(0, 100) %><%= e.description.length > 100 ? '...' : '' %></div><% } %>
+              </td>
+              <td><span class="badge-info"><%= e.req_type || 'functional' %></span></td>
+              <td><span class="<%= e.priority === 'high' ? 'badge-danger' : e.priority === 'medium' ? 'badge-warning' : 'badge-muted' %>"><%= e.priority || 'medium' %></span></td>
+              <td><span class="<%= e.status === 'confirmed' ? 'badge-success' : e.status === 'rejected' ? 'badge-danger' : 'badge-muted' %>"><%= e.status || 'pending' %></span></td>
+              <td><span class="confidence-badge"><%= Math.round((e.confidence || 0.7) * 100) %>%</span></td>
+              <% if (member.role !== 'viewer') { %>
+                <td>
+                  <div class="row-actions">
+                    <form method="POST" action="/projects/<%= project.id %>/requirements/<%= e.id %>/confirm">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn-primary btn-sm" title="Confirm">✓</button>
+                    </form>
+                    <form method="POST" action="/projects/<%= project.id %>/requirements/<%= e.id %>/reject">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn-outline btn-sm" title="Reject">x</button>
+                    </form>
+                    <form method="POST" action="/projects/<%= project.id %>/requirements/<%= e.id %>/delete" onsubmit="return confirm('Delete this requirement?')">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn-danger btn-sm">Del</button>
+                    </form>
+                  </div>
+                </td>
+              <% } %>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
   <% } %>
 </div>
+
 <script>
-document.getElementById('select-all') && document.getElementById('select-all').addEventListener('change', function(){
-  document.querySelectorAll('.entity-check').forEach(c => c.checked = this.checked);
-});
+(function(){
+  const selectAll = document.getElementById('selectAll');
+  const toolbar = document.getElementById('bulkToolbar');
+  const countEl = document.getElementById('bulkCount');
+  const checkboxes = document.querySelectorAll('.row-check');
+
+  function updateToolbar() {
+    if (!toolbar || !countEl) return;
+    const checked = document.querySelectorAll('.row-check:checked').length;
+    countEl.textContent = checked;
+    toolbar.classList.toggle('visible', checked > 0);
+  }
+
+  if (selectAll) {
+    selectAll.addEventListener('change', function(){
+      checkboxes.forEach(function(cb){ cb.checked = selectAll.checked; });
+      updateToolbar();
+    });
+  }
+  checkboxes.forEach(function(cb){ cb.addEventListener('change', updateToolbar); });
+})();
 </script>

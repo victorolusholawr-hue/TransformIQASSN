@@ -2,58 +2,199 @@
   <%- include('../partials/insights_nav') %>
   <div class="page-header" style="margin-top:20px;">
     <h1>🎙 Voice Capture</h1>
+    <button class="btn-outline btn-sm voice-new-turn" id="btn-new-turn" onclick="newTurn()" disabled>New Turn</button>
   </div>
 
-  <div class="card">
-    <p>Use your microphone to record a meeting, interview, or notes. The transcript will be saved as a source for AI extraction.</p>
-    <p class="badge-warning" style="margin-top:8px;display:inline-block;">Chrome / Edge only</p>
+  <!-- Speakers -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="section-header" style="padding:14px 0 10px;">
+      <h3>Speakers</h3>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <input type="text" id="speaker-name" class="form-input" placeholder="Speaker name" style="flex:1;min-width:160px;">
+      <input type="text" id="speaker-role" class="form-input" placeholder="Role or team" style="flex:1;min-width:160px;">
+      <button class="btn-primary btn-sm" onclick="addSpeaker()">Add</button>
+    </div>
+    <div class="speaker-chips" id="speaker-chips">
+      <span class="speaker-chip active" data-id="0" onclick="selectSpeaker(0)">0 Unknown Speaker</span>
+    </div>
+  </div>
 
-    <div class="voice-controls" style="margin-top:20px;">
-      <button id="btn-start" class="btn-primary" onclick="startRecording()">🎙 Start Recording</button>
-      <button id="btn-stop" class="btn-danger" onclick="stopRecording()" disabled>⏹ Stop</button>
+  <!-- Recording -->
+  <div class="card" style="margin-bottom:16px;">
+    <p class="badge-warning" style="display:inline-block;margin-bottom:16px;">Chrome / Edge only — requires microphone permission</p>
+
+    <div class="voice-controls">
+      <button id="btn-start" class="rec-btn rec-btn-start" onclick="startRecording()" title="Start recording">🎙</button>
+      <button id="btn-pause" class="rec-btn rec-btn-pause" onclick="togglePause()" disabled title="Pause / Resume">⏸</button>
+      <button id="btn-stop"  class="rec-btn rec-btn-stop"  onclick="stopRecording()"  disabled title="Stop recording">⏹</button>
+      <div class="rec-meta">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="filter-profanity"> Filter profanity &amp; vulgarity
+        </label>
+        <span class="speaker-label" id="current-speaker-label">Speaker: Unknown Speaker</span>
+      </div>
     </div>
 
-    <div id="transcript-wrap" style="margin-top:20px; display:none;">
-      <form method="POST" action="/projects/<%= project.id %>/voice-capture/save">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <div class="form-group">
-          <label class="form-label">Transcript</label>
-          <textarea id="transcript" name="transcript" class="form-input form-textarea" rows="10" placeholder="Transcript will appear here..."></textarea>
-        </div>
-        <div class="form-actions">
-          <button type="submit" class="btn-primary">Save as Source</button>
-        </div>
-      </form>
+    <div id="recording-status" style="margin-top:12px;font-size:0.88rem;color:var(--muted);display:none;">
+      🔴 Recording…
     </div>
+  </div>
+
+  <!-- Transcript -->
+  <div class="card" id="transcript-wrap">
+    <form method="POST" action="/projects/<%= project.id %>/voice-capture/save">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-group">
+        <label class="form-label">Transcript</label>
+        <textarea id="transcript" name="transcript" class="form-input form-textarea" rows="12"
+          placeholder="Your transcription will appear here..."></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary" id="btn-save" disabled>Save as Source</button>
+        <span style="font-size:0.82rem;color:var(--muted);">Saved as a source you can then run AI extraction on.</span>
+      </div>
+    </form>
   </div>
 </div>
+
 <script>
+const PROFANITY = ['fuck','shit','bitch','asshole','bastard','crap','damn','ass','piss'];
+
 let recognition;
-const startBtn = document.getElementById('btn-start');
-const stopBtn  = document.getElementById('btn-stop');
-const tWrap    = document.getElementById('transcript-wrap');
-const tArea    = document.getElementById('transcript');
+let isPaused     = false;
+let isRecording  = false;
+let accumulated  = '';
+let speakers     = [{ id: 0, name: 'Unknown Speaker', role: '' }];
+let nextId       = 1;
+let currentSpId  = 0;
+
+const btnStart  = document.getElementById('btn-start');
+const btnPause  = document.getElementById('btn-pause');
+const btnStop   = document.getElementById('btn-stop');
+const btnNewTurn= document.getElementById('btn-new-turn');
+const btnSave   = document.getElementById('btn-save');
+const tArea     = document.getElementById('transcript');
+const statusEl  = document.getElementById('recording-status');
+const spLabel   = document.getElementById('current-speaker-label');
+const chipsEl   = document.getElementById('speaker-chips');
+
+function renderChips() {
+  chipsEl.innerHTML = '';
+  speakers.forEach(function(sp) {
+    const c = document.createElement('span');
+    c.className = 'speaker-chip' + (sp.id === currentSpId ? ' active' : '');
+    c.setAttribute('data-id', sp.id);
+    c.textContent = sp.id + ' ' + sp.name;
+    c.onclick = function(){ selectSpeaker(sp.id); };
+    chipsEl.appendChild(c);
+  });
+}
+
+function selectSpeaker(id) {
+  const sp = speakers.find(function(s){ return s.id === id; });
+  if (!sp) return;
+  currentSpId = id;
+  spLabel.textContent = 'Speaker: ' + sp.name;
+  renderChips();
+}
+
+function addSpeaker() {
+  const name = document.getElementById('speaker-name').value.trim();
+  if (!name) return;
+  const role = document.getElementById('speaker-role').value.trim();
+  speakers.push({ id: nextId, name: name, role: role });
+  nextId++;
+  document.getElementById('speaker-name').value = '';
+  document.getElementById('speaker-role').value = '';
+  renderChips();
+}
+
+function newTurn() {
+  const sp = speakers.find(function(s){ return s.id === currentSpId; });
+  const label = sp ? sp.name : 'Unknown Speaker';
+  const val = tArea.value;
+  tArea.value = val + (val && !val.endsWith('\n') ? '\n' : '') + '[' + label + ']: ';
+  tArea.focus();
+  tArea.setSelectionRange(tArea.value.length, tArea.value.length);
+}
+
+function filterText(t) {
+  if (!document.getElementById('filter-profanity').checked) return t;
+  PROFANITY.forEach(function(w) {
+    t = t.replace(new RegExp('\\b' + w + '\\b', 'gi'), '***');
+  });
+  return t;
+}
+
+function buildRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('Speech recognition is not supported. Use Chrome or Edge.'); return null; }
+  const r = new SR();
+  r.continuous     = true;
+  r.interimResults = true;
+  r.lang           = 'en-GB';
+  r.onresult = function(e) {
+    let interim = '';
+    let final   = accumulated;
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        final += filterText(e.results[i][0].transcript) + ' ';
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    accumulated = final;
+    tArea.value = final + interim;
+    btnSave.disabled = !(final.trim().length > 0);
+  };
+  r.onend = function() {
+    if (isRecording && !isPaused) {
+      r.start();
+    }
+  };
+  return r;
+}
 
 function startRecording() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { alert('Speech recognition is not supported in this browser. Use Chrome or Edge.'); return; }
-  recognition = new SR();
-  recognition.continuous     = true;
-  recognition.interimResults = true;
-  recognition.lang           = 'en-GB';
-  recognition.onresult = e => {
-    let t = '';
-    for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + ' ';
-    tArea.value = t.trim();
-    tWrap.style.display = 'block';
-  };
+  recognition = buildRecognition();
+  if (!recognition) return;
+  isRecording = true;
+  isPaused    = false;
+  accumulated = tArea.value;
   recognition.start();
-  startBtn.disabled = true;
-  stopBtn.disabled  = false;
+  btnStart.disabled = true;
+  btnPause.disabled = false;
+  btnStop.disabled  = false;
+  btnNewTurn.disabled = false;
+  statusEl.style.display = 'block';
 }
+
+function togglePause() {
+  if (!isRecording) return;
+  if (isPaused) {
+    isPaused = false;
+    recognition.start();
+    btnPause.title = 'Pause';
+    btnPause.textContent = '⏸';
+    statusEl.style.display = 'block';
+  } else {
+    isPaused = true;
+    recognition.stop();
+    btnPause.title = 'Resume';
+    btnPause.textContent = '▶';
+    statusEl.style.display = 'none';
+  }
+}
+
 function stopRecording() {
+  isRecording = false;
+  isPaused    = false;
   if (recognition) recognition.stop();
-  startBtn.disabled = false;
-  stopBtn.disabled  = true;
+  btnStart.disabled = false;
+  btnPause.disabled = true;
+  btnStop.disabled  = true;
+  statusEl.style.display = 'none';
+  btnSave.disabled = !(tArea.value.trim().length > 0);
 }
 </script>

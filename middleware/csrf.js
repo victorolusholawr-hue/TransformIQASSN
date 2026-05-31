@@ -10,7 +10,10 @@ function csrfMiddleware(req, res, next) {
 
   // Validate on state-changing methods
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
-    const token = req.body && req.body._csrf;
+    const token = (req.body && req.body._csrf) ||
+      req.get('X-CSRF-Token') ||
+      req.get('X-CSRFToken') ||
+      req.query._csrf;
     // Allow JSON API calls from same session (AJAX endpoints send token in body too)
     if (token !== req.session.csrfToken) {
       res.status(403).send('Invalid CSRF token');

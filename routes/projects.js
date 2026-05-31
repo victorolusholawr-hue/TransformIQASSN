@@ -79,12 +79,31 @@ router.get('/:id', loginRequired, projectAccessRequired, async (req, res) => {
         WHERE  pm.project_id = @pid
       `);
 
+    const recentSources = await pool.request()
+      .input('pid', sql.UniqueIdentifier, pid)
+      .query('SELECT TOP 5 * FROM dbo.Sources WHERE project_id=@pid ORDER BY created_at DESC');
+
+    const sourceStatuses = await pool.request()
+      .input('pid', sql.UniqueIdentifier, pid)
+      .query(`
+        SELECT ai_status, COUNT(*) AS cnt
+        FROM dbo.Sources
+        WHERE project_id=@pid
+        GROUP BY ai_status
+      `);
+    const sourceStatusCounts = { pending: 0, processing: 0, done: 0, failed: 0 };
+    for (const row of sourceStatuses.recordset) {
+      sourceStatusCounts[row.ai_status || 'pending'] = row.cnt;
+    }
+
     res.render('projects/detail', {
       title:   req.project.name,
       project: req.project,
       member:  req.projectMember,
       counts,
       members: members.recordset,
+      recentSources: recentSources.recordset,
+      sourceStatusCounts,
     });
   } catch (err) {
     console.error('[projects/detail]', err);

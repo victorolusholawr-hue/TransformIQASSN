@@ -32,7 +32,7 @@
   <% } else { %>
     <div class="projects-grid">
       <% for (const p of projects) { %>
-        <a href="/projects/<%= p.id %>" class="project-card <%= p.status === 'archived' ? 'project-card-archived' : '' %>">
+        <div class="project-card <%= p.status === 'archived' ? 'project-card-archived' : '' %>">
           <div class="project-card-header">
             <h3 class="project-card-name"><%= p.name %></h3>
             <% if (p.status === 'archived') { %><span class="badge-muted">Archived</span><% } %>
@@ -43,7 +43,13 @@
             <span><%= p.req_count %> requirements</span>
             <span class="badge-role"><%= p.member_role %></span>
           </div>
-        </a>
+          <div class="project-card-actions">
+            <a href="/projects/<%= p.id %>" class="btn-primary btn-sm">Open →</a>
+            <% if (p.member_role !== 'viewer') { %>
+              <a href="/projects/<%= p.id %>/sources/upload" class="btn-outline btn-sm">+ Upload Source</a>
+            <% } %>
+          </div>
+        </div>
       <% } %>
     </div>
   <% } %>

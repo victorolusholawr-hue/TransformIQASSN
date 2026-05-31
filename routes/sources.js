@@ -8,9 +8,31 @@ const { loginRequired, analystRequired } = require('../middleware/auth');
 const { projectAccessRequired }          = require('../middleware/projectAccess');
 const { saveUpload }                     = require('../config/storage');
 const { parseFile, parseImageWithVision }= require('../services/fileParser');
-const { extractAllChunks, logUsage, isRateLimited } = require('../services/ai');
+const { extractChunk, extractAllChunks, logUsage, isRateLimited } = require('../services/ai');
 const { buildGraphEdges }                = require('../services/graphBuilder');
 const router   = express.Router();
+
+function wantsJson(req) {
+  return req.get('X-Requested-With') === 'XMLHttpRequest' ||
+    (req.get('Accept') || '').split(',')[0].includes('application/json');
+}
+
+async function loadSourceAccess(pool, projectId, userId) {
+  const access = await pool.request()
+    .input('pid', sql.UniqueIdentifier, projectId)
+    .input('uid', sql.UniqueIdentifier, userId)
+    .query(`
+      SELECT p.*, pm.role AS member_role
+      FROM dbo.Projects p
+      JOIN dbo.ProjectMembers pm ON pm.project_id = p.id
+      WHERE p.id=@pid AND pm.user_id=@uid
+    `);
+  const project = access.recordset[0];
+  if (project) {
+    try { project.tags = JSON.parse(project.tags || '[]'); } catch (_) { project.tags = []; }
+  }
+  return project;
+}
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads', 'sources');
 const storage    = multer.diskStorage({
@@ -36,6 +58,7 @@ router.get('/projects/:projectId/sources', loginRequired, projectAccessRequired,
   res.render('sources/list', {
     title:   'Sources',
     project: req.project,
+    member:  req.projectMember,
     sources: result.recordset,
   });
 });
@@ -47,7 +70,8 @@ router.get('/projects/:projectId/sources/upload', analystRequired, projectAccess
   if (req.query.last) {
     const r = await pool.request()
       .input('id', sql.UniqueIdentifier, req.query.last)
-      .query('SELECT * FROM dbo.Sources WHERE id=@id');
+      .input('pid', sql.UniqueIdentifier, req.params.projectId)
+      .query('SELECT * FROM dbo.Sources WHERE id=@id AND project_id=@pid');
     last = r.recordset[0] || null;
   }
   res.render('sources/upload', { title: 'Upload Source', project: req.project, last });
@@ -78,7 +102,7 @@ router.post('/projects/:projectId/sources/upload',
         .input('text',    sql.NVarChar,         parsed.text || null)
         .input('estatus', sql.NVarChar,         parsed.text ? 'done' : 'pending')
         .input('uid',     sql.UniqueIdentifier, req.session.userId)
-        .input('meta',    sql.NVarChar,         JSON.stringify(parsed.metadata || {}))
+        .input('meta',    sql.NVarChar,         JSON.stringify({ ...(parsed.metadata || {}), participants: req.body.participants || null }))
         .query(`INSERT INTO dbo.Sources
           (id, project_id, name, source_type, file_url, file_ext, extracted_text, extraction_status, uploader_id, metadata)
           VALUES (@id, @pid, @name, @stype, @furl, @fext, @text, @estatus, @uid, @meta)`);
@@ -100,7 +124,27 @@ router.get('/sources/:id', loginRequired, async (req, res) => {
     .query('SELECT * FROM dbo.Sources WHERE id=@id');
   const source = result.recordset[0];
   if (!source) return res.status(404).render('error', { title: '404', message: 'Source not found' });
-  res.render('sources/detail', { title: source.name, source });
+
+  const project = await loadSourceAccess(pool, source.project_id, req.session.userId);
+  if (!project) {
+    req.flash('error', 'Access denied.');
+    return res.redirect('/dashboard');
+  }
+
+  let metadata = {};
+  let participants = [];
+  try { metadata = JSON.parse(source.metadata || '{}'); } catch (_) {}
+  try { participants = JSON.parse(source.participants || '[]'); } catch (_) {}
+  source.metadata = metadata;
+  source.participants = participants;
+  source.text_preview = (source.extracted_text || '').slice(0, 3000);
+
+  res.render('sources/detail', {
+    title: source.name,
+    source,
+    project,
+    member: { role: project.member_role },
+  });
 });
 
 // ── Extract ──────────────────────────────────────────────────
@@ -113,10 +157,20 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
       .input('id', sql.UniqueIdentifier, req.params.id)
       .query('SELECT * FROM dbo.Sources WHERE id=@id');
     const source = result.recordset[0];
-    if (!source) return res.status(404).json({ ok: false, error: 'Not found' });
+    if (!source) {
+      if (wantsJson(req)) return res.status(404).json({ ok: false, error: 'Not found' });
+      req.flash('error', 'Source not found.');
+      return res.redirect('/dashboard');
+    }
+    const project = await loadSourceAccess(pool, source.project_id, req.session.userId);
+    if (!project) {
+      if (wantsJson(req)) return res.status(403).json({ ok: false, error: 'Access denied.' });
+      req.flash('error', 'Access denied.');
+      return res.redirect('/dashboard');
+    }
 
     if (await isRateLimited(req.session.userId, source.project_id, 'extract')) {
-      if (req.accepts('json')) return res.json({ ok: false, error: 'Rate limit reached.' });
+      if (wantsJson(req)) return res.json({ ok: false, error: 'Rate limit reached.' });
       req.flash('error', 'AI rate limit reached. Please try again later.');
       return res.redirect(`/sources/${req.params.id}`);
     }
@@ -133,7 +187,7 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
     }
 
     if (!text || text.trim().length < 50) {
-      if (req.accepts('json')) return res.json({ ok: false, error: 'Not enough text to extract.' });
+      if (wantsJson(req)) return res.json({ ok: false, error: 'Not enough text to extract.' });
       req.flash('error', 'Source has insufficient text for extraction.');
       return res.redirect(`/sources/${req.params.id}`);
     }
@@ -147,6 +201,41 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
         .input('n',  sql.Int, chunksTotal)
         .query("UPDATE dbo.Sources SET ai_status='processing', chunks_total=@n WHERE id=@id");
       return res.json({ ok: true, chunks_total: chunksTotal });
+    }
+
+    if (phase === 'chunk') {
+      const chunkIdx = parseInt(req.body.chunk_idx || '0', 10);
+      const chunkSize = 6000;
+      const chunksTotal = Math.ceil(text.length / chunkSize);
+      const chunkText = text.slice(chunkIdx * chunkSize, (chunkIdx + 1) * chunkSize);
+      if (!chunkText) {
+        return res.json({ ok: false, error: 'Invalid extraction section.' });
+      }
+
+      if (chunkIdx === 0) {
+        for (const t of ['Requirements','Stakeholders','Processes','Decisions','Risks','BusinessRules','Systems','KPIs']) {
+          await pool.request()
+            .input('sid', sql.UniqueIdentifier, req.params.id)
+            .query(`DELETE FROM dbo.${t} WHERE source_id=@sid`);
+        }
+      }
+
+      const entities = await extractChunk(chunkText);
+      const inserted = await _insertEntities(pool, source.project_id, req.params.id, entities);
+      const done = chunkIdx >= chunksTotal - 1;
+      if (done) {
+        await buildGraphEdges(source.project_id);
+        await logUsage(source.project_id, req.session.userId, 0, 0, 'extract');
+        await pool.request().input('id', sql.UniqueIdentifier, req.params.id)
+          .query("UPDATE dbo.Sources SET ai_status='done' WHERE id=@id");
+      }
+      return res.json({
+        ok: true,
+        done,
+        inserted,
+        flagged: 0,
+        redirect_url: `/projects/${source.project_id}`,
+      });
     }
 
     // Sync / single shot
@@ -168,13 +257,19 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
     await pool.request().input('id', sql.UniqueIdentifier, req.params.id)
       .query("UPDATE dbo.Sources SET ai_status='done' WHERE id=@id");
 
-    if (req.accepts('json')) return res.json({ ok: true, done: true });
+    if (wantsJson(req)) return res.json({ ok: true, done: true, redirect_url: `/projects/${source.project_id}` });
     req.flash('success', 'Entities extracted successfully.');
     res.redirect(`/projects/${source.project_id}`);
   } catch (err) {
     console.error('[sources/extract]', err);
-    if (req.accepts('json')) return res.json({ ok: false, error: err.message });
-    req.flash('error', 'Extraction failed.');
+    try {
+      const p2 = await getPool();
+      await p2.request()
+        .input('id', sql.UniqueIdentifier, req.params.id)
+        .query("UPDATE dbo.Sources SET ai_status='failed' WHERE id=@id");
+    } catch (_) {}
+    if (wantsJson(req)) return res.json({ ok: false, error: err.message });
+    req.flash('error', 'Extraction failed. Please try again.');
     res.redirect(`/sources/${req.params.id}`);
   }
 });
@@ -187,6 +282,11 @@ router.post('/sources/:id/delete', analystRequired, async (req, res) => {
     .query('SELECT project_id FROM dbo.Sources WHERE id=@id');
   const source = result.recordset[0];
   if (!source) return res.redirect('/dashboard');
+  const project = await loadSourceAccess(pool, source.project_id, req.session.userId);
+  if (!project) {
+    req.flash('error', 'Access denied.');
+    return res.redirect('/dashboard');
+  }
 
   for (const t of ['Requirements','Stakeholders','Processes','Decisions','Risks','BusinessRules','Systems','KPIs']) {
     await pool.request().input('sid', sql.UniqueIdentifier, req.params.id)
@@ -205,12 +305,14 @@ router.get('/projects/:projectId/sources/done-ids', loginRequired, projectAccess
   const result = await pool.request()
     .input('pid', sql.UniqueIdentifier, req.params.projectId)
     .query("SELECT id FROM dbo.Sources WHERE project_id=@pid AND ai_status='done'");
-  res.json({ ids: result.recordset.map(r => r.id) });
+  const sourceIds = result.recordset.map(r => r.id);
+  res.json({ source_ids: sourceIds, ids: sourceIds });
 });
 
 // ── Entity insert helper ─────────────────────────────────────
 async function _insertEntities(pool, projectId, sourceId, entities) {
   const { v4: uuid } = require('uuid');
+  let inserted = 0;
 
   if (entities.requirements) {
     for (const e of entities.requirements) {
@@ -225,6 +327,7 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('conf',   sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote',  sql.NVarChar, e.source_quote || null)
         .query('INSERT INTO dbo.Requirements (id,project_id,source_id,req_type,title,description,priority,confidence,source_quote) VALUES (@id,@pid,@sid,@rtype,@title,@desc,@pri,@conf,@quote)');
+      inserted++;
     }
   }
   if (entities.stakeholders) {
@@ -241,6 +344,7 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('conf', sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote',sql.NVarChar, e.source_quote || null)
         .query('INSERT INTO dbo.Stakeholders (id,project_id,source_id,name,role,organization,influence,interest,confidence,source_quote) VALUES (@id,@pid,@sid,@name,@role,@org,@inf,@int,@conf,@quote)');
+      inserted++;
     }
   }
   if (entities.processes) {
@@ -256,6 +360,7 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('conf',    sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote',   sql.NVarChar, e.source_quote || null)
         .query('INSERT INTO dbo.Processes (id,project_id,source_id,name,description,steps,mermaid_syntax,confidence,source_quote) VALUES (@id,@pid,@sid,@name,@desc,@steps,@mermaid,@conf,@quote)');
+      inserted++;
     }
   }
   if (entities.decisions) {
@@ -272,6 +377,7 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('conf', sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote',sql.NVarChar, e.source_quote || null)
         .query('INSERT INTO dbo.Decisions (id,project_id,source_id,title,description,rationale,decision_maker,status,confidence,source_quote) VALUES (@id,@pid,@sid,@title,@desc,@rat,@dm,@stat,@conf,@quote)');
+      inserted++;
     }
   }
   if (entities.risks) {
@@ -290,6 +396,7 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('conf', sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote',sql.NVarChar, e.source_quote || null)
         .query('INSERT INTO dbo.Risks (id,project_id,source_id,title,description,category,likelihood,impact,mitigation,owner,confidence,source_quote) VALUES (@id,@pid,@sid,@title,@desc,@cat,@lik,@imp,@mit,@own,@conf,@quote)');
+      inserted++;
     }
   }
   if (entities.business_rules) {
@@ -304,6 +411,7 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('conf', sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote',sql.NVarChar, e.source_quote || null)
         .query('INSERT INTO dbo.BusinessRules (id,project_id,source_id,title,description,category,confidence,source_quote) VALUES (@id,@pid,@sid,@title,@desc,@cat,@conf,@quote)');
+      inserted++;
     }
   }
   if (entities.systems) {
@@ -319,6 +427,7 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('conf',  sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote', sql.NVarChar, e.source_quote || null)
         .query('INSERT INTO dbo.Systems (id,project_id,source_id,name,system_type,description,integrations,confidence,source_quote) VALUES (@id,@pid,@sid,@name,@stype,@desc,@integ,@conf,@quote)');
+      inserted++;
     }
   }
   if (entities.kpis) {
@@ -336,8 +445,10 @@ async function _insertEntities(pool, projectId, sourceId, entities) {
         .input('conf',  sql.Decimal(3,2), e.confidence || 0.5)
         .input('quote', sql.NVarChar, e.source_quote || null)
         .query('INSERT INTO dbo.KPIs (id,project_id,source_id,name,description,target_value,measurement_method,frequency,owner,confidence,source_quote) VALUES (@id,@pid,@sid,@name,@desc,@tval,@meth,@freq,@own,@conf,@quote)');
+      inserted++;
     }
   }
+  return inserted;
 }
 
 module.exports = router;

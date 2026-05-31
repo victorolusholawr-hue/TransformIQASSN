@@ -1,45 +1,193 @@
+<div class="ai-toast" id="aiToast">
+  <div class="ai-toast-icon" id="aiToastIcon"></div>
+  <div class="ai-toast-body">
+    <strong id="aiToastTitle"></strong>
+    <span id="aiToastSub"></span>
+  </div>
+  <button type="button" class="ai-toast-close" id="aiToastClose" aria-label="Dismiss">x</button>
+</div>
+
 <div class="container">
   <div class="page-header">
-    <h1><%= source.name %></h1>
+    <div>
+      <a href="/projects/<%= source.project_id %>" class="back-btn">← Back to Project</a>
+      <h1><%= source.name %></h1>
+      <p class="page-sub"><a href="/projects/<%= source.project_id %>"><%= project ? project.name : 'Project' %></a> &rsaquo; Sources</p>
+    </div>
     <div class="header-actions">
-      <% if (source.ai_status !== 'done' && source.extracted_text) { %>
-        <form method="POST" action="/sources/<%= source.id %>/extract">
+      <% if (member.role !== 'viewer') { %>
+        <form method="POST" action="/sources/<%= source.id %>/extract" class="extract-form">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button type="submit" class="btn-primary">🤖 Extract with AI</button>
+          <button type="submit" class="<%= source.ai_status === 'done' ? 'btn-outline' : 'btn-primary' %>" id="extractBtn">
+            <%= source.ai_status === 'done' ? 'Re-extract with AI' : 'Extract with AI' %>
+          </button>
+        </form>
+        <a href="/projects/<%= source.project_id %>/sources/upload" class="btn-outline">+ Upload Another</a>
+        <form method="POST" action="/sources/<%= source.id %>/delete" onsubmit="return confirm('Delete this source and all its extracted entities?')">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button type="submit" class="btn-danger">Delete</button>
         </form>
       <% } %>
-      <form method="POST" action="/sources/<%= source.id %>/delete">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <button type="submit" class="btn-danger" onclick="return confirm('Delete this source?')">Delete</button>
-      </form>
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:16px;">
-    <div class="meta-row">
-      <div class="meta-item"><strong>Type</strong><span><%= source.source_type || '—' %></span></div>
-      <div class="meta-item"><strong>Extraction</strong>
-        <span class="<%= source.extraction_status === 'done' ? 'badge-success' : 'badge-warning' %>">
-          <%= source.extraction_status %>
-        </span>
+  <div class="source-detail-grid">
+    <div>
+      <div class="section">
+        <div class="section-header"><h3>Extracted Text Preview</h3></div>
+        <% if (source.text_preview) { %>
+          <pre class="extracted-text"><%= source.text_preview %><%= source.extracted_text && source.extracted_text.length > 3000 ? '\n\n[... truncated for display ...]' : '' %></pre>
+        <% } else { %>
+          <div class="empty-state"><p>No text extracted. The file may be an image, unsupported format, or empty.</p></div>
+        <% } %>
       </div>
-      <div class="meta-item"><strong>AI Status</strong>
-        <span class="<%= source.ai_status === 'done' ? 'badge-success' : source.ai_status === 'processing' ? 'badge-warning' : 'badge-muted' %>">
-          <%= source.ai_status %>
-        </span>
-      </div>
-      <div class="meta-item"><strong>Uploaded</strong><span><%= new Date(source.created_at).toLocaleString() %></span></div>
     </div>
-  </div>
 
-  <% if (source.extracted_text) { %>
-    <div class="section">
-      <div class="section-header"><h3>Extracted Text</h3></div>
-      <pre class="extracted-text"><%= source.extracted_text.slice(0, 5000) %><%= source.extracted_text.length > 5000 ? '\n\n[... truncated for display ...]' : '' %></pre>
-    </div>
-  <% } else { %>
-    <div class="notice notice-warning">
-      No text extracted from this file. This may be an image — click "Extract with AI" to use Claude Vision.
-    </div>
-  <% } %>
+    <aside>
+      <div class="card">
+        <h2 style="margin-bottom:16px;">Source Details</h2>
+        <dl class="source-meta-list">
+          <dt>Type</dt>
+          <dd><span class="badge-muted"><%= source.source_type || 'document' %></span></dd>
+          <dt>Extension</dt>
+          <dd><%= source.file_ext || '—' %></dd>
+          <dt>Words</dt>
+          <dd><%= source.metadata.word_count || 0 %></dd>
+          <dt>Pages</dt>
+          <dd><%= source.metadata.page_count || '—' %></dd>
+          <dt>Extraction</dt>
+          <dd><%= source.metadata.extraction_method || '—' %></dd>
+          <dt>Text Status</dt>
+          <dd><span class="<%= source.extraction_status === 'done' ? 'badge-success' : source.extraction_status === 'failed' ? 'badge-danger' : 'badge-warning' %>"><%= source.extraction_status %></span></dd>
+          <dt>AI Status</dt>
+          <dd><span class="status-<%= source.ai_status %>"><%= source.ai_status === 'done' ? 'Extracted' : source.ai_status === 'processing' ? 'Processing...' : source.ai_status === 'failed' ? 'Failed' : 'Pending' %></span></dd>
+          <dt>Uploaded</dt>
+          <dd><%= source.created_at ? new Date(source.created_at).toLocaleDateString() : '—' %></dd>
+        </dl>
+
+        <% if (source.participants && source.participants.length) { %>
+          <div class="source-card-divider">
+            <p class="muted" style="margin-bottom:8px;">Participants</p>
+            <% for (const p of source.participants) { %>
+              <span class="badge-info" style="margin:2px 4px 2px 0;"><%= p %></span>
+            <% } %>
+          </div>
+        <% } %>
+
+        <% if (source.file_url) { %>
+          <div class="source-card-divider">
+            <a href="<%= source.file_url %>" target="_blank" class="btn-outline btn-sm source-original-link">View Original File</a>
+          </div>
+        <% } %>
+      </div>
+
+      <% if (source.ai_status === 'pending') { %>
+        <div class="notice notice-info source-side-notice">Click <strong>Extract with AI</strong> to identify requirements, stakeholders, processes, risks, and more from this document.</div>
+      <% } else if (source.ai_status === 'done') { %>
+        <div class="notice notice-success source-side-notice">AI extraction complete. View extracted entities in the <a href="/projects/<%= source.project_id %>">project hub</a>.</div>
+      <% } else if (source.ai_status === 'failed') { %>
+        <div class="notice notice-warning source-side-notice">AI extraction failed. Check configuration and try again.</div>
+      <% } %>
+    </aside>
+  </div>
 </div>
+
+<script>
+(function(){
+  const extractUrl = '/sources/<%= source.id %>/extract';
+  const toast = document.getElementById('aiToast');
+  const toastIcon = document.getElementById('aiToastIcon');
+  const toastTitle = document.getElementById('aiToastTitle');
+  const toastSub = document.getElementById('aiToastSub');
+  const closeBtn = document.getElementById('aiToastClose');
+  let autoHideTimer = null;
+  let originalBtnText = 'Extract with AI';
+
+  function showToast(state, title, sub, autoDismissMs) {
+    toast.className = 'ai-toast ai-toast-' + state + ' ai-toast-visible';
+    toastIcon.innerHTML = state === 'analyzing' ? '<span class="ai-toast-spinner"></span>' : state === 'success' ? '✓' : 'x';
+    toastTitle.textContent = title;
+    toastSub.textContent = sub || '';
+    if (autoDismissMs) {
+      clearTimeout(autoHideTimer);
+      autoHideTimer = setTimeout(hideToast, autoDismissMs);
+    }
+  }
+
+  function hideToast() {
+    toast.classList.remove('ai-toast-visible');
+  }
+
+  closeBtn.addEventListener('click', function(){
+    clearTimeout(autoHideTimer);
+    hideToast();
+  });
+
+  function runExtraction() {
+    const btn = document.getElementById('extractBtn');
+    originalBtnText = btn ? btn.textContent : 'Extract with AI';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Analyzing...';
+    }
+    showToast('analyzing', 'Analyzing document...', 'Preparing...');
+
+    const init = new FormData();
+    init.append('phase', 'init');
+    window.tiqFetchJson(extractUrl, { method: 'POST', body: init })
+      .then(function(data){
+        if (!data.ok) {
+          onError(data.error || 'Initialization failed.');
+          return;
+        }
+        processChunk(0, data.chunks_total, data.redirect_url, 0, 0);
+      })
+      .catch(function(err){ onError(err.message || 'Network error during initialization.'); });
+  }
+
+  function processChunk(idx, total, redirectUrl, totalInserted, totalFlagged) {
+    if (!total) {
+      onError('No extractable text sections were found.');
+      return;
+    }
+    showToast('analyzing', 'Analyzing document...', 'Processing section ' + (idx + 1) + ' of ' + total + '...');
+    const f = new FormData();
+    f.append('phase', 'chunk');
+    f.append('chunk_idx', String(idx));
+    window.tiqFetchJson(extractUrl, { method: 'POST', body: f })
+      .then(function(data){
+        if (!data.ok) {
+          onError(data.error || 'Failed on section ' + (idx + 1) + '.');
+          return;
+        }
+        const inserted = totalInserted + (data.inserted || 0);
+        const flagged = totalFlagged + (data.flagged || 0);
+        if (data.done) {
+          let msg = 'Extracted ' + inserted + ' entities.';
+          if (flagged) msg += ' ' + flagged + ' possible duplicates flagged.';
+          showToast('success', 'Extraction complete', msg, 5000);
+          setTimeout(function(){ window.location.href = data.redirect_url || redirectUrl || '/projects/<%= source.project_id %>'; }, 1200);
+        } else {
+          processChunk(idx + 1, total, redirectUrl, inserted, flagged);
+        }
+      })
+      .catch(function(err){ onError(err.message || 'Network error on section ' + (idx + 1) + '.'); });
+  }
+
+  function onError(msg) {
+    const btn = document.getElementById('extractBtn');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalBtnText;
+    }
+    showToast('error', 'Extraction failed', msg);
+  }
+
+  document.querySelectorAll('.extract-form').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      runExtraction();
+    });
+  });
+})();
+</script>

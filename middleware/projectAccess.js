@@ -16,7 +16,7 @@ async function projectAccessRequired(req, res, next) {
       .input('project_id', sql.UniqueIdentifier, projectId)
       .input('user_id',    sql.UniqueIdentifier, req.session.userId)
       .query(`
-        SELECT p.id, p.name, p.description, p.owner_id, p.status,
+        SELECT p.id, p.name, p.description, p.owner_id, p.status, p.tags,
                pm.role AS member_role
         FROM   dbo.Projects p
         JOIN   dbo.ProjectMembers pm
@@ -30,6 +30,7 @@ async function projectAccessRequired(req, res, next) {
     }
 
     const row        = result.recordset[0];
+    try { row.tags = JSON.parse(row.tags || '[]'); } catch (_) { row.tags = []; }
     req.project      = row;
     req.projectMember = { role: row.member_role };
     next();
