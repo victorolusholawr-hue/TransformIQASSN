@@ -76,7 +76,7 @@ TransformIQ_Association/
 │   ├── ai.js                 # callClaude(), extractChunk(), callClaudeStructured(), logUsage(), isRateLimited(); exports CHUNK_SIZE, MAX_CHUNKS, MAX_TEXT_CHARS, assertAiConfigured
 │   ├── dataHealth.js         # collectDataHealth(), repairOwnerMemberships(), recoverMissingLocalSources()
 │   ├── fileParser.js         # parseFile() — PDF/DOCX/XLSX/TXT/image → { text, metadata }; Claude Vision fallback for images
-│   ├── graphBuilder.js       # buildGraphEdges() — infers relationships, inserts into GraphEdges
+│   ├── graphBuilder.js       # buildGraphEdges(), ensureGraphEdges(), getGraphElements(), getTraceabilityRows() — richer entity-to-entity relationship inference, collapsed nodes, deterministic SHA1 node IDs
 │   ├── exportBuilder.js      # buildBrd(), buildFrd(), buildRiskRegister(), buildExecutiveSummary(), buildExecutiveSummaryPdf(), buildFutureState()
 │   ├── mssqlSessionStore.js  # Custom express-session store backed by dbo.Sessions; get/set/destroy/touch/prune methods
 │   └── sourceStatus.js       # reconcileProjectSourceStatuses(), reconcileSingleSourceStatus() — fixes stuck ai_status by checking actual entity counts
@@ -225,9 +225,9 @@ Entity type URL slugs: `requirements`, `stakeholders`, `processes`, `decisions`,
 ### Graph
 | Method | Path | Description |
 |---|---|---|
-| GET | `/projects/:id/graph` | Cytoscape.js knowledge graph viewer |
-| GET | `/projects/:id/graph/data` | JSON API — Cytoscape elements format |
-| GET | `/projects/:id/traceability` | Traceability matrix (HTML table) |
+| GET | `/projects/:id/graph` | Business Impact Map — calls `ensureGraphEdges()`, renders Cytoscape.js viewer |
+| GET | `/projects/:id/graph/data` | JSON API — returns `{ elements, stats: { node_count, edge_count } }` |
+| GET | `/projects/:id/traceability` | Requirements Traceability — row-per-requirement table with linked entities |
 
 ### Visualize
 | Method | Path | Description |
@@ -412,6 +412,24 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 - `.table-method` / `.table-actions` / `.table-help` / `.table-error` — table cell utility classes
 - `.upload-success-bar` / `.upload-success-icon` / `.upload-success-link` — compact success notification bar on upload page
 
+**Business Impact Map classes:**
+- `.impact-map-layout` — 2-column CSS grid (canvas + panel); collapses to 1 column at `≤1000px`
+- `.impact-map-main`, `.impact-map-panel` — card containers; panel is `position: sticky; top: 88px`
+- `.impact-map-toolbar` / `.impact-map-filter-group` / `.impact-filter` / `.impact-filter.active` — entity filter pill buttons
+- `.impact-relationship-filter` — relationship dropdown in the controls row
+- `.impact-map-controls` / `.impact-label-toggle` — label toggle checkboxes row
+- `.impact-map-summary` — muted summary text below toolbar
+- `.impact-map-canvas` — Cytoscape container (`height: 680px`)
+- `.impact-panel-type` — uppercase type label at top of detail panel
+- `.impact-linked-list` / `.impact-linked-list li` — linked items list in the detail panel
+
+**Requirements Traceability classes:**
+- `.traceability-business-wrap` — horizontally-scrollable container (`min-width: 1160px`)
+- `.traceability-business-table` — full-width table with sticky header style
+- `.trace-empty` — muted "Unmapped" text in empty cells
+- `.trace-evidence` — muted evidence/source quote cell (`max-width: 280px`)
+- `.trace-row-unmapped` — amber-tinted row for requirements with no entity links
+
 **Visualize page classes:**
 - `.risk-heatmap-wrap` / `.heatmap-matrix` / `.heatmap-axis` / `.heatmap-header-row` / `.heatmap-row` / `.heatmap-row-label` — risk heatmap layout
 - `.heatmap-cell` / `.heatmap-cell-empty` / `.heatmap-cell-low` / `.heatmap-cell-med` / `.heatmap-cell-high` / `.heatmap-cell-critical` — heatmap cell colour zones
@@ -477,11 +495,23 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 - `loginRequired` redirects to `/login?next=<originalUrl>` so users return to their intended page after authenticating
 - Login form includes a hidden `next` field; `safeNextPath()` validates it before redirect (prevents open-redirect attacks)
 
-### Knowledge Graph
-- Cytoscape.js viewer at `/projects/:id/graph`
-- JSON data endpoint at `/projects/:id/graph/data` returns elements format with nodes (colour-coded by type) and edges
-- Node colours match `.ec-*` brand colours
-- Traceability matrix accessible via three route aliases: `/projects/:id/traceability`, `/projects/:id/graph/traceability`, `/projects/:id/graph/matrix`
+### Business Impact Map (formerly Knowledge Graph)
+- **Renamed:** `/projects/:id/graph` now renders "Business Impact Map" (`views/graph/view.ejs`); the old "Knowledge Graph" label is gone.
+- **2-column layout:** main Cytoscape.js canvas (`#cy`) on the left + sticky detail panel (`#impactPanel`) on the right. Layout collapses to single column at `≤1000px`.
+- **Entity filters:** pill buttons (All / Requirements / Systems / Processes / Stakeholders / Risks) hide/show node types; selecting a specific type auto-enables node labels.
+- **Relationship filter:** `<select>` populated from actual edge relationship values; filters visible edges and optionally hides isolated nodes.
+- **Label toggles:** "Show names" and "Show relationships" checkboxes toggle `.show-node-labels` / `.show-edge-labels` CSS classes on nodes/edges via Cytoscape `toggleClass`.
+- **Detail panel:** clicking a node populates the right panel with type badge, title, description, source quote, "Open detail" link, and a list of all connected items with relationship labels.
+- **Collapsed nodes:** entities with the same normalised label are merged into a single node (count shown in parentheses); node IDs are deterministic SHA1 hashes of `type:normalised_label` — stable across re-extractions.
+- **Summary bar:** shows `N business items mapped through M relationships` (or a guidance message when no edges exist).
+- **`getGraphElements(projectId)`** now returns `{ elements, stats: { node_count, edge_count } }` instead of just `{ elements }`.
+- **`ensureGraphEdges(projectId)`** — called on graph page load; builds edges if entities exist but no edges are stored yet (avoids re-building on every load).
+
+### Requirements Traceability (formerly Traceability Matrix)
+- **Renamed:** `/projects/:id/traceability` (and aliases) now renders "Requirements Traceability" (`views/graph/traceability.ejs`).
+- **Row-based table** replacing the req × system checkbox grid. Each row = one requirement; columns: Priority, Impacted Systems, Impacted Processes, Stakeholders/Owners, Risks, Decisions, Evidence (source quote).
+- **Unmapped highlight:** rows with no links in any column get a subtle amber background (`.trace-row-unmapped`); a notice at the top counts unmapped requirements.
+- **`getTraceabilityRows(projectId)`** — new export from `graphBuilder.js`; calls `ensureGraphEdges`, loads entities + edges, and returns structured rows with pre-resolved linked nodes per relationship type.
 
 ### Stakeholder Duplicate Detection
 - At extraction time, each new stakeholder is compared against existing ones using name similarity (>50% token overlap or substring match)

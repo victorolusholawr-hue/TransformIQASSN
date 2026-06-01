@@ -1,86 +1,217 @@
-<div class="container">
+<div class="container container-wide">
   <div class="page-header">
-    <h1>Knowledge Graph</h1>
+    <div>
+      <h1>Business Impact Map</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
     <div class="header-actions">
-      <a href="/projects/<%= project.id %>/traceability" class="btn-outline">Traceability Matrix</a>
-      <a href="/projects/<%= project.id %>" class="btn-outline">← Project</a>
+      <a href="/projects/<%= project.id %>/traceability" class="btn-outline">Requirements Traceability</a>
+      <a href="/projects/<%= project.id %>" class="btn-outline">Project</a>
     </div>
   </div>
 
-  <div class="graph-legend">
-    <% const nodeTypes = [
-      {type:'requirements',color:'#6366f1',label:'Requirements'},
-      {type:'stakeholders',color:'#06b6d4',label:'Stakeholders'},
-      {type:'processes',   color:'#22c55e',label:'Processes'},
-      {type:'decisions',   color:'#f59e0b',label:'Decisions'},
-      {type:'risks',       color:'#ef4444',label:'Risks'},
-      {type:'business_rules',color:'#8b5cf6',label:'Business Rules'},
-      {type:'systems',     color:'#3b82f6',label:'Systems'},
-      {type:'kpis',        color:'#ec4899',label:'KPIs'},
-    ]; %>
-    <% for (const n of nodeTypes) { %>
-      <span class="legend-item">
-        <span class="legend-dot" style="background:<%= n.color %>"></span>
-        <%= n.label %>
-      </span>
-    <% } %>
-  </div>
+  <div class="impact-map-layout">
+    <section class="impact-map-main">
+      <div class="impact-map-toolbar">
+        <div class="impact-map-filter-group" aria-label="Entity filters">
+          <button type="button" class="impact-filter active" data-type="all">All</button>
+          <button type="button" class="impact-filter" data-type="requirements">Requirements</button>
+          <button type="button" class="impact-filter" data-type="systems">Systems</button>
+          <button type="button" class="impact-filter" data-type="processes">Processes</button>
+          <button type="button" class="impact-filter" data-type="stakeholders">Stakeholders</button>
+          <button type="button" class="impact-filter" data-type="risks">Risks</button>
+        </div>
+        <div class="impact-map-controls">
+          <select id="relationshipFilter" class="form-input impact-relationship-filter" aria-label="Relationship filter">
+            <option value="all">All relationships</option>
+          </select>
+          <label class="impact-label-toggle">
+            <input type="checkbox" id="nodeLabelToggle">
+            Show names
+          </label>
+          <label class="impact-label-toggle">
+            <input type="checkbox" id="edgeLabelToggle">
+            Show relationships
+          </label>
+        </div>
+      </div>
+      <div id="graphSummary" class="impact-map-summary">Loading relationships...</div>
+      <div id="cy" class="graph-canvas impact-map-canvas"></div>
+    </section>
 
-  <div id="cy" class="graph-canvas"></div>
+    <aside class="impact-map-panel" id="impactPanel">
+      <h2>Explore impact</h2>
+      <p class="muted">Select a node to see its details, evidence, and linked business items.</p>
+    </aside>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
 <script>
-const PROJECT_ID = '<%= project.id %>';
+(function(){
+  const PROJECT_ID = '<%= project.id %>';
+  const cyEl = document.getElementById('cy');
+  const panel = document.getElementById('impactPanel');
+  const summary = document.getElementById('graphSummary');
+  const relFilter = document.getElementById('relationshipFilter');
+  const edgeLabelToggle = document.getElementById('edgeLabelToggle');
+  const nodeLabelToggle = document.getElementById('nodeLabelToggle');
+  let cy;
+  let activeType = 'all';
+  let activeRelationship = 'all';
 
-fetch(`/projects/${PROJECT_ID}/graph/data`)
-  .then(r => r.json())
-  .then(({ elements }) => {
-    if (!elements.length) {
-      document.getElementById('cy').innerHTML = '<p style="text-align:center;padding:60px;color:var(--muted)">No entities yet. Upload sources and extract entities to build the graph.</p>';
-      return;
+  function esc(value) {
+    return String(value || '').replace(/[&<>"']/g, function(ch) {
+      return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[ch];
+    });
+  }
+
+  function setPanelForNode(node) {
+    const data = node.data();
+    const linked = node.connectedEdges().map(function(edge){
+      const other = edge.source().id() === node.id() ? edge.target() : edge.source();
+      return { relationship: edge.data('relationship'), label: other.data('title') || other.data('label'), typeLabel: other.data('typeLabel') };
+    }).sort(function(a, b){ return a.label.localeCompare(b.label); });
+
+    panel.innerHTML = `
+      <div class="impact-panel-type">${esc(data.typeLabel)}</div>
+      <h2>${esc(data.title || data.label)}</h2>
+      ${data.count > 1 ? `<p class="muted">${data.count} similar extracted records are grouped here.</p>` : ''}
+      ${data.description ? `<p>${esc(data.description)}</p>` : '<p class="muted">No description captured.</p>'}
+      ${data.source_quote ? `<blockquote class="source-quote">${esc(data.source_quote)}</blockquote>` : ''}
+      <a class="btn-outline btn-sm" href="${esc(data.url)}">Open detail</a>
+      <h3>Linked business items</h3>
+      ${linked.length ? `<ul class="impact-linked-list">${linked.map(function(item){ return `<li><span>${esc(item.relationship)}</span><strong>${esc(item.label)}</strong><em>${esc(item.typeLabel)}</em></li>`; }).join('')}</ul>` : '<p class="muted">No relationships found for this item.</p>'}
+    `;
+  }
+
+  function applyFilters() {
+    if (!cy) return;
+    cy.elements().removeClass('is-hidden');
+    if (activeType !== 'all') {
+      cy.nodes().forEach(function(node){
+        const keep = node.data('type') === activeType || node.connectedEdges().some(function(edge){
+          const other = edge.source().id() === node.id() ? edge.target() : edge.source();
+          return other.data('type') === activeType;
+        });
+        if (!keep) node.addClass('is-hidden');
+      });
     }
-    const cy = cytoscape({
-      container: document.getElementById('cy'),
-      elements,
-      style: [
-        {
-          selector: 'node',
-          style: {
+    if (activeRelationship !== 'all') {
+      cy.edges().forEach(function(edge){ if (edge.data('relationship') !== activeRelationship) edge.addClass('is-hidden'); });
+      cy.nodes().forEach(function(node){
+        if (node.connectedEdges(':visible').length === 0 && activeType === 'all') node.addClass('is-hidden');
+      });
+    }
+    cy.nodes().toggleClass('show-node-labels', nodeLabelToggle.checked);
+    cy.edges().toggleClass('show-edge-labels', edgeLabelToggle.checked);
+    cy.layout({ name: 'cose', idealEdgeLength: 210, nodeOverlap: 36, fit: true, padding: 90, randomize: false, componentSpacing: 160, nodeRepulsion: 780000, edgeElasticity: 70, gravity: 34, numIter: 650 }).run();
+  }
+
+  fetch(`/projects/${PROJECT_ID}/graph/data`)
+    .then(function(r){ return r.json(); })
+    .then(function(graph){
+      const elements = graph.elements || [];
+      const nodes = elements.filter(function(e){ return !e.data.source; });
+      const edges = elements.filter(function(e){ return e.data.source; });
+      if (!nodes.length) {
+        cyEl.innerHTML = '<p style="text-align:center;padding:60px;color:var(--muted)">No entities yet. Upload sources and extract entities to build the impact map.</p>';
+        summary.textContent = 'No entities available yet.';
+        return;
+      }
+      if (!edges.length) {
+        summary.innerHTML = 'Entities were found, but no business relationships could be inferred yet. Try extracting more detailed source material.';
+      } else {
+        summary.textContent = `${nodes.length} business items mapped through ${edges.length} relationships.`;
+      }
+
+      [...new Set(edges.map(function(e){ return e.data.relationship; }).filter(Boolean))].sort().forEach(function(rel){
+        const option = document.createElement('option');
+        option.value = rel;
+        option.textContent = rel;
+        relFilter.appendChild(option);
+      });
+
+      cy = cytoscape({
+        container: cyEl,
+        elements,
+        style: [
+          { selector: 'node', style: {
             'background-color': 'data(color)',
-            'label': 'data(label)',
-            'color': '#fff',
-            'font-size': '10px',
+            'label': '',
+            'color': '#111827',
+            'font-size': '12px',
+            'font-weight': 700,
             'text-wrap': 'wrap',
-            'text-max-width': '80px',
-            'text-valign': 'center',
+            'text-max-width': '132px',
+            'text-valign': 'bottom',
             'text-halign': 'center',
-            'width': '60px',
-            'height': '60px',
-            'border-width': 2,
-            'border-color': '#fff',
-          }
-        },
-        {
-          selector: 'edge',
-          style: {
-            'width': 1.5,
-            'line-color': 'var(--border2)',
-            'target-arrow-color': 'var(--border2)',
+            'text-margin-y': 10,
+            'text-background-color': '#ffffff',
+            'text-background-opacity': 0.96,
+            'text-background-padding': 4,
+            'text-border-color': '#e5e7eb',
+            'text-border-width': 1,
+            'text-border-opacity': 1,
+            'width': '68px',
+            'height': '68px',
+            'border-width': 3,
+            'border-color': '#ffffff'
+          }},
+          { selector: 'node.show-node-labels', style: { 'label': 'data(label)' } },
+          { selector: 'edge', style: {
+            'width': 'mapData(weight, 1, 3, 1, 2.4)',
+            'line-color': '#94a3b8',
+            'target-arrow-color': '#94a3b8',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
-            'label': 'data(label)',
+            'opacity': 0.5,
+            'label': '',
             'font-size': '9px',
-            'color': 'var(--muted)',
-          }
-        },
-        { selector: 'node:selected', style: { 'border-color': 'var(--primary)', 'border-width': 3 } },
-      ],
-      layout: { name: 'cose', idealEdgeLength: 120, nodeOverlap: 20, refresh: 20, fit: true, padding: 30, randomize: true, componentSpacing: 100, nodeRepulsion: 450000, edgeElasticity: 100, nestingFactor: 5, gravity: 80, numIter: 1000 },
+            'text-background-color': '#ffffff',
+            'text-background-opacity': 0.96,
+            'text-background-padding': 2,
+            'color': '#64748b'
+          }},
+          { selector: 'edge.show-edge-labels', style: { 'label': 'data(label)', 'opacity': 0.78 } },
+          { selector: '.is-hidden', style: { 'display': 'none' } },
+          { selector: 'node:selected', style: { 'border-color': '#72246c', 'border-width': 5, 'label': 'data(label)' } }
+        ],
+        layout: { name: 'cose', idealEdgeLength: 210, nodeOverlap: 36, fit: true, padding: 90, randomize: true, componentSpacing: 160, nodeRepulsion: 780000, edgeElasticity: 70, gravity: 34, numIter: 950 }
+      });
+
+      cy.on('tap', 'node', function(e){ setPanelForNode(e.target); });
+      cy.nodes().toggleClass('show-node-labels', nodeLabelToggle.checked);
+      cy.edges().toggleClass('show-edge-labels', edgeLabelToggle.checked);
+      if (cy.nodes().length) setPanelForNode(cy.nodes()[0]);
+    })
+    .catch(function(){
+      cyEl.innerHTML = '<p style="text-align:center;padding:60px;color:var(--danger)">Could not load the impact map.</p>';
+      summary.textContent = 'Could not load relationships.';
     });
-    cy.on('tap', 'node', e => {
-      const data = e.target.data();
-      alert(`${data.type}: ${data.label}`);
+
+  document.querySelectorAll('.impact-filter').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.impact-filter').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      activeType = btn.dataset.type || 'all';
+      if (activeType !== 'all' && !nodeLabelToggle.checked) {
+        nodeLabelToggle.checked = true;
+      }
+      if (activeType === 'all') {
+        nodeLabelToggle.checked = false;
+      }
+      applyFilters();
     });
   });
+  relFilter.addEventListener('change', function(){ activeRelationship = relFilter.value || 'all'; applyFilters(); });
+  nodeLabelToggle.addEventListener('change', function(){
+    if (!cy) return;
+    cy.nodes().toggleClass('show-node-labels', nodeLabelToggle.checked);
+  });
+  edgeLabelToggle.addEventListener('change', function(){
+    if (!cy) return;
+    cy.edges().toggleClass('show-edge-labels', edgeLabelToggle.checked);
+  });
+})();
 </script>

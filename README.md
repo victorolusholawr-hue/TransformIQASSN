@@ -8,7 +8,7 @@ AI-powered business transformation platform. Upload meeting transcripts, reports
 |---|---|
 | **Capture** | Upload PDF, DOCX, XLSX, TXT, or image files as project sources |
 | **Extract** | Claude (`claude-opus-4-7`) extracts 8 entity types per document |
-| **Graph** | Entities are connected into a knowledge graph (Cytoscape.js) |
+| **Graph** | Business Impact Map — entities connected through inferred relationships (Cytoscape.js); Requirements Traceability table |
 | **Visualise** | Process maps, RACI matrix, stakeholder map, risk heatmap, gap analysis |
 | **Insights** | Future state, roadmap, user stories, acceptance criteria, impact matrix |
 | **Export** | BRD, FRD, Risk Register (Excel), Executive Summary (Word or PDF), Future State doc |

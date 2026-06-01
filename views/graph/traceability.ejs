@@ -1,31 +1,52 @@
-<div class="container">
+<div class="container container-wide">
   <div class="page-header">
-    <h1>Traceability Matrix</h1>
-    <a href="/projects/<%= project.id %>/graph" class="btn-outline">← Knowledge Graph</a>
+    <div>
+      <h1>Requirements Traceability</h1>
+      <p class="page-sub"><a href="/projects/<%= project.id %>"><%= project.name %></a></p>
+    </div>
+    <a href="/projects/<%= project.id %>/graph" class="btn-outline">Business Impact Map</a>
   </div>
 
-  <% if (!requirements.length || !systems.length) { %>
-    <div class="empty-state"><p>Need at least one Requirement and one System to show the traceability matrix.</p></div>
+  <% if (!rows.length) { %>
+    <div class="empty-state"><p>No requirements extracted yet. Upload a source and run AI extraction first.</p></div>
   <% } else { %>
-    <div class="table-wrap">
-      <table class="traceability-table">
+    <% const unmapped = rows.filter(r => r.unmapped).length; %>
+    <% if (unmapped) { %>
+      <div class="notice notice-warning" style="margin-bottom:16px;"><%= unmapped %> requirement<%= unmapped === 1 ? '' : 's' %> could not be mapped to systems, processes, stakeholders, risks, or decisions yet.</div>
+    <% } else { %>
+      <div class="notice notice-success" style="margin-bottom:16px;">All requirements have at least one business relationship.</div>
+    <% } %>
+    <div class="traceability-business-wrap">
+      <table class="traceability-business-table">
         <thead>
           <tr>
             <th>Requirement</th>
-            <% for (const s of systems) { %>
-              <th class="rotate-header"><span><%= s.name %></span></th>
-            <% } %>
+            <th>Priority</th>
+            <th>Impacted Systems</th>
+            <th>Impacted Processes</th>
+            <th>Stakeholders / Owners</th>
+            <th>Risks</th>
+            <th>Decisions</th>
+            <th>Evidence</th>
           </tr>
         </thead>
         <tbody>
-          <% for (const r of requirements) { %>
-            <tr>
-              <td class="req-cell"><%= r.title %></td>
-              <% for (const s of systems) { %>
-                <td class="matrix-cell <% if(edgeSet.has(r.id+':'+s.id)||edgeSet.has(s.id+':'+r.id)){%>matrix-linked<%}%>">
-                  <% if(edgeSet.has(r.id+':'+s.id)||edgeSet.has(s.id+':'+r.id)){%>✓<%}else{%>·<%}%>
-                </td>
-              <% } %>
+          <% function chips(items) { %>
+            <% if (!items.length) { %><span class="trace-empty">Unmapped</span><% } %>
+            <% for (const item of items) { %>
+              <a href="<%= item.url %>" class="impact-tag"><%= item.label %><%= item.count > 1 ? ' (' + item.count + ')' : '' %></a>
+            <% } %>
+          <% } %>
+          <% for (const row of rows) { %>
+            <tr class="<%= row.unmapped ? 'trace-row-unmapped' : '' %>">
+              <td><a href="<%= row.url %>"><strong><%= row.title %></strong></a></td>
+              <td><span class="badge-muted"><%= row.priority %></span></td>
+              <td><% chips(row.systems); %></td>
+              <td><% chips(row.processes); %></td>
+              <td><% chips(row.stakeholders); %></td>
+              <td><% chips(row.risks); %></td>
+              <td><% chips(row.decisions); %></td>
+              <td class="trace-evidence"><%= row.evidence || 'No source quote captured.' %></td>
             </tr>
           <% } %>
         </tbody>

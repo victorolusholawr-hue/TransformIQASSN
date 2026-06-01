@@ -1,44 +1,42 @@
 'use strict';
 const express = require('express');
-const { getPool, sql }    = require('../config/database');
-const { loginRequired }   = require('../middleware/auth');
+const { loginRequired } = require('../middleware/auth');
 const { projectAccessRequired } = require('../middleware/projectAccess');
-const { getGraphElements } = require('../services/graphBuilder');
+const { ensureGraphEdges, getGraphElements, getTraceabilityRows } = require('../services/graphBuilder');
 const router = express.Router();
 
 router.get('/projects/:projectId/graph', loginRequired, projectAccessRequired, async (req, res) => {
-  res.render('graph/view', { title: 'Knowledge Graph', project: req.project });
+  try {
+    await ensureGraphEdges(req.params.projectId);
+    res.render('graph/view', { title: 'Business Impact Map', project: req.project });
+  } catch (err) {
+    console.error('[graph/view]', err);
+    req.flash('error', 'Failed to prepare the business impact map.');
+    res.redirect(`/projects/${req.params.projectId}`);
+  }
 });
 
 router.get('/projects/:projectId/graph/data', loginRequired, projectAccessRequired, async (req, res) => {
-  const elements = await getGraphElements(req.params.projectId);
-  res.json({ elements });
+  try {
+    const graph = await getGraphElements(req.params.projectId);
+    res.json(graph);
+  } catch (err) {
+    console.error('[graph/data]', err);
+    res.status(500).json({ error: 'Failed to load graph data.' });
+  }
 });
 
 async function renderTraceability(req, res) {
   try {
-    const pool = await getPool();
-    const pid  = req.params.projectId;
-
-    const reqs = await pool.request().input('pid', sql.UniqueIdentifier, pid)
-      .query('SELECT id, title FROM dbo.Requirements WHERE project_id=@pid');
-    const syss = await pool.request().input('pid', sql.UniqueIdentifier, pid)
-      .query('SELECT id, name FROM dbo.Systems WHERE project_id=@pid');
-    const edges = await pool.request().input('pid', sql.UniqueIdentifier, pid)
-      .query("SELECT source_node_id, target_node_id FROM dbo.GraphEdges WHERE project_id=@pid");
-
-    const edgeSet = new Set(edges.recordset.map(e => `${e.source_node_id}:${e.target_node_id}`));
-
+    const rows = await getTraceabilityRows(req.params.projectId);
     res.render('graph/traceability', {
-      title:        'Traceability Matrix',
-      project:      req.project,
-      requirements: reqs.recordset,
-      systems:      syss.recordset,
-      edgeSet,
+      title: 'Requirements Traceability',
+      project: req.project,
+      rows,
     });
   } catch (err) {
     console.error('[traceability]', err);
-    req.flash('error', 'Failed to load traceability matrix.');
+    req.flash('error', 'Failed to load traceability.');
     res.redirect(`/projects/${req.params.projectId}`);
   }
 }
