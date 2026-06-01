@@ -12,6 +12,7 @@ AI-powered business transformation platform. Upload meeting transcripts, reports
 | **Visualise** | Process maps, RACI matrix, stakeholder map, risk heatmap, gap analysis |
 | **Insights** | Future state, roadmap, user stories, acceptance criteria, impact matrix |
 | **Export** | BRD, FRD, Risk Register (Excel), Executive Summary (Word or PDF), Future State doc |
+| **Admin** | Data health report — orphaned projects, unlinked files, missing memberships |
 
 ## Entity types extracted
 
@@ -63,9 +64,24 @@ See [`.env.example`](.env.example) for the full list.
 
 | Role | Permissions |
 |---|---|
-| `owner` | Full access + delete project + manage members |
+| `owner` | Full access + delete/archive/restore project + manage members |
 | `analyst` | Upload sources, trigger extraction, edit entities, generate insights |
-| `viewer` | Read-only access to all project data |
+| `viewer` | Read-only access to all project data (cannot trigger extraction) |
+
+## Data health (admin only)
+
+Admins see a **Data Health** link in the navbar (`/admin/data-health`) with a read-only integrity report:
+
+- Projects with missing membership records (invisible to users on the dashboard)
+- Local source files not linked to a `dbo.Sources` row
+- Export files not linked to a `dbo.Documents` row
+- Entity rows referencing deleted sources
+
+Missing owner memberships are auto-repaired on every app startup. Unlinked source files are auto-recovered on startup when the context is unambiguous (one active project, zero existing source rows). The CLI script `scripts/data-health.js` supports `--repair-memberships` and `--recover-sources [--dry-run]` for manual repair.
+
+## Project management
+
+Projects can be **archived** (soft-delete, hidden from active lists) or **permanently deleted** via the Danger Zone on the edit page. Deletion cascades all sources, entities, graph data, and exports.
 
 ## Development
 

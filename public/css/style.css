@@ -800,6 +800,15 @@ h1, h2, h3, h4 { line-height: 1.3; }
 .form-actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
 .form-label { font-size: 0.88rem; font-weight: 600; color: var(--text); }
 .form-hint { font-size: 0.8rem; color: var(--muted); }
+.danger-zone {
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  border-radius: var(--radius);
+  background: rgba(220, 38, 38, 0.06);
+}
+.danger-zone h3 { margin: 0 0 8px; color: var(--danger); font-size: 1rem; }
+.danger-zone p { margin: 0 0 14px; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
 
 /* ─── Upload drop-zone ───────────────────────────────────────────── */
 .drop-zone {

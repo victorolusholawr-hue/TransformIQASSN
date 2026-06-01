@@ -2,6 +2,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { getPool, getMasterPool } = require('../config/database');
+const { recoverMissingLocalSources } = require('../services/dataHealth');
 
 const DB_NAME = process.env.DB_NAME || 'transformiq_assn';
 
@@ -25,6 +26,15 @@ async function initDb() {
 
   for (const batch of batches) {
     await pool.request().query(batch);
+  }
+
+  try {
+    const repair = await recoverMissingLocalSources({ pool });
+    if (repair.recovered.length) {
+      console.log(`[db] Recovered ${repair.recovered.length} local source file(s)`);
+    }
+  } catch (err) {
+    console.error('[db] Local source recovery check failed:', err);
   }
 
   console.log('[db] Schema initialised');

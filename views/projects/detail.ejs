@@ -354,69 +354,16 @@
   }
 
   const recalibrateBtn = document.getElementById('recalibrateBtn');
-  if (recalibrateBtn) {
+  if (recalibrateBtn && window.tiqRunProjectRecalibration) {
     recalibrateBtn.addEventListener('click', function(){
-      if (!confirm('Re-extract all completed sources using the latest AI prompt? This will update all extracted entities for this project.')) return;
-      const btn = this;
-      btn.disabled = true;
-      window.tiqFetchJson('/projects/<%= project.id %>/sources/done-ids')
-        .then(function(data){
-          const ids = data.source_ids || [];
-          if (!ids.length) {
-            alert('No extracted sources found for this project.');
-            btn.disabled = false;
-            btn.textContent = 'Recalibrate';
-            return;
-          }
-          let i = 0;
-          function extractSource(id, label) {
-            const init = new FormData();
-            init.append('phase', 'init');
-            return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: init })
-              .then(function(meta){
-                if (!meta.ok) throw new Error(meta.error || 'Extraction initialization failed.');
-                const total = meta.chunks_total || 0;
-                function chunk(idx, attempt) {
-                  if (idx >= total) return Promise.resolve();
-                  btn.textContent = label + ' section ' + (idx + 1) + '/' + total + '...';
-                  const f = new FormData();
-                  f.append('phase', 'chunk');
-                  f.append('chunk_idx', String(idx));
-                  f.append('retry_attempt', String(attempt || 0));
-                  return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: f })
-                    .then(function(data){
-                      if (!data.ok) {
-                        if ((attempt || 0) < 2) return chunk(idx, (attempt || 0) + 1);
-                        throw new Error(data.error || 'Extraction failed on section ' + (idx + 1) + '.');
-                      }
-                      return chunk(idx + 1, 0);
-                    });
-                }
-                return chunk(0, 0);
-              });
-          }
-          function next() {
-            if (i >= ids.length) {
-              btn.textContent = 'Done - reloading...';
-              setTimeout(function(){ location.reload(); }, 800);
-              return;
-            }
-            btn.textContent = 'Recalibrating ' + (i + 1) + '/' + ids.length + '...';
-            extractSource(ids[i], 'Recalibrating ' + (i + 1) + '/' + ids.length)
-              .then(function(){ i++; next(); })
-              .catch(function(err){
-                alert(err.message || 'Extraction failed.');
-                btn.disabled = false;
-                btn.textContent = 'Recalibrate';
-              });
-          }
-          next();
-        })
-        .catch(function(err){
-          alert(err.message || 'Could not fetch source list. Please try again.');
-          btn.disabled = false;
-          btn.textContent = 'Recalibrate';
-        });
+      window.tiqRunProjectRecalibration({
+        button: this,
+        projectId: '<%= project.id %>',
+        idleText: 'Recalibrate',
+        actionText: 'Recalibrating',
+        emptyMessage: 'No extracted sources found for this project.',
+        confirmMessage: 'Re-extract all completed sources using the latest AI prompt? This will update all extracted entities for this project.'
+      });
     });
   }
 

@@ -321,6 +321,11 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
       req.flash('error', 'Access denied.');
       return res.redirect('/dashboard');
     }
+    if (project.member_role === 'viewer') {
+      if (wantsJson(req)) return res.status(403).json({ ok: false, error: 'Analysts and admins only.' });
+      req.flash('error', 'Analysts and admins only.');
+      return res.redirect(`/sources/${req.params.id}`);
+    }
 
     if (await isRateLimited(req.session.userId, source.project_id, 'extract')) {
       if (wantsJson(req)) return res.json({ ok: false, error: 'Rate limit reached.' });
@@ -354,7 +359,7 @@ router.post('/sources/:id/extract', analystRequired, async (req, res) => {
         .input('id', sql.UniqueIdentifier, req.params.id)
         .input('n',  sql.Int, chunksTotal)
         .input('meta', sql.NVarChar, metadataWith(initMetadata, { ai_started_at: new Date().toISOString() }))
-        .query("UPDATE dbo.Sources SET chunks_total=@n, ai_status='pending', metadata=@meta WHERE id=@id");
+        .query("UPDATE dbo.Sources SET chunks_total=@n, ai_status='processing', metadata=@meta WHERE id=@id");
       return res.json({ ok: true, chunks_total: chunksTotal, redirect_url: `/projects/${source.project_id}` });
     }
 
@@ -485,6 +490,7 @@ router.post('/sources/:id/delete', analystRequired, async (req, res) => {
 // ── Done IDs (JSON API for progress poll) ────────────────────
 router.get('/projects/:projectId/sources/done-ids', loginRequired, projectAccessRequired, async (req, res) => {
   const pool   = await getPool();
+  await reconcileProjectSourceStatuses(pool, req.params.projectId);
   const result = await pool.request()
     .input('pid', sql.UniqueIdentifier, req.params.projectId)
     .query("SELECT id FROM dbo.Sources WHERE project_id=@pid AND ai_status='done'");

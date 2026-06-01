@@ -55,6 +55,83 @@
         });
       });
     };
+    window.tiqRunProjectRecalibration = function(options) {
+      options = options || {};
+      var btn = options.button;
+      if (!btn || btn.disabled) return;
+      var projectId = options.projectId;
+      var idleText = options.idleText || btn.textContent || 'Recalibrate';
+      var actionText = options.actionText || 'Recalibrating';
+      var emptyMessage = options.emptyMessage || 'No extracted sources found for this project.';
+      var confirmMessage = options.confirmMessage || 'Re-extract all completed sources using the latest AI prompt?';
+      if (!projectId || !window.tiqFetchJson) {
+        alert('Recalibration is not available. Please reload the page and try again.');
+        return;
+      }
+      if (!confirm(confirmMessage)) return;
+
+      function reset(message) {
+        if (message) alert(message);
+        btn.disabled = false;
+        btn.textContent = idleText;
+      }
+
+      function extractSource(id, label) {
+        var init = new FormData();
+        init.append('phase', 'init');
+        return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: init })
+          .then(function(meta) {
+            if (!meta.ok) throw new Error(meta.error || 'Extraction initialization failed.');
+            var total = Number(meta.chunks_total || 0);
+            if (!total) throw new Error('No extractable text sections were found.');
+            function chunk(idx, attempt) {
+              if (idx >= total) return Promise.resolve();
+              btn.textContent = label + ' section ' + (idx + 1) + '/' + total + '...';
+              var f = new FormData();
+              f.append('phase', 'chunk');
+              f.append('chunk_idx', String(idx));
+              f.append('retry_attempt', String(attempt || 0));
+              return window.tiqFetchJson('/sources/' + id + '/extract', { method: 'POST', body: f })
+                .then(function(data) {
+                  if (!data.ok) {
+                    if ((attempt || 0) < 2) return chunk(idx, (attempt || 0) + 1);
+                    throw new Error(data.error || 'Extraction failed on section ' + (idx + 1) + '.');
+                  }
+                  return chunk(idx + 1, 0);
+                });
+            }
+            return chunk(0, 0);
+          });
+      }
+
+      btn.disabled = true;
+      btn.textContent = actionText + '...';
+      window.tiqFetchJson('/projects/' + projectId + '/sources/done-ids')
+        .then(function(data) {
+          var ids = data.source_ids || data.ids || [];
+          if (!ids.length) {
+            reset(emptyMessage);
+            return;
+          }
+          var i = 0;
+          function next() {
+            if (i >= ids.length) {
+              btn.textContent = 'Done - reloading...';
+              setTimeout(function() { window.location.reload(); }, 800);
+              return;
+            }
+            var label = actionText + ' ' + (i + 1) + '/' + ids.length;
+            btn.textContent = label + '...';
+            extractSource(ids[i], label)
+              .then(function() { i += 1; next(); })
+              .catch(function(err) { reset((err && err.message) || 'Extraction failed.'); });
+          }
+          next();
+        })
+        .catch(function(err) {
+          reset((err && err.message) || 'Could not fetch source list. Please try again.');
+        });
+    };
   </script>
 </head>
 <body>

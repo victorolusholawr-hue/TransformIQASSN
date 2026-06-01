@@ -333,6 +333,18 @@ INSERT INTO dbo.AppSettings (setting_key, setting_value) VALUES (
     '{"rate_limit_enabled":false,"max_insight_per_user_per_hour":10,"max_extract_per_user_per_hour":20,"max_insight_per_project_per_hour":20,"max_extract_per_project_per_hour":40,"budget_enabled":false,"max_monthly_tokens":1000000}'
 );
 
+-- Ensure every project owner is also a project member. Older/imported data can
+-- be orphaned otherwise, making active projects invisible on the dashboard.
+INSERT INTO dbo.ProjectMembers (id, project_id, user_id, role)
+SELECT NEWID(), p.id, p.owner_id, 'owner'
+FROM dbo.Projects p
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM dbo.ProjectMembers pm
+    WHERE pm.project_id = p.id
+      AND pm.user_id = p.owner_id
+);
+
 -- ============================================================
 -- Indexes
 -- ============================================================

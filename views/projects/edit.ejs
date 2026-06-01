@@ -24,10 +24,27 @@
 
     <div class="form-actions">
       <button type="submit" class="btn-primary">Save Changes</button>
-      <button type="submit" class="btn-outline" form="project-archive-form" onclick="return confirm('Archive this project?')">Archive</button>
+      <% if (project.status === 'archived') { %>
+        <button type="submit" class="btn-outline" form="project-restore-form">Restore</button>
+      <% } else { %>
+        <button type="submit" class="btn-outline" form="project-archive-form" onclick="return confirm('Archive this project?')">Archive</button>
+      <% } %>
     </div>
   </form>
   <form method="POST" action="/projects/<%= project.id %>/archive" id="project-archive-form" hidden>
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   </form>
+  <form method="POST" action="/projects/<%= project.id %>/restore" id="project-restore-form" hidden>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  </form>
+
+  <div class="danger-zone">
+    <h3>Danger Zone</h3>
+    <p>Deleting this project will permanently remove all its sources, entities, graph data, and exports. This action cannot be undone.</p>
+    <form method="POST" action="/projects/<%= project.id %>/delete"
+          onsubmit="return confirm('Delete &quot;<%= project.name %>&quot; and ALL its data? This cannot be undone.')">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button type="submit" class="btn-danger">Delete Project Permanently</button>
+    </form>
+  </div>
 </div>

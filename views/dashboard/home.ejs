@@ -18,6 +18,17 @@
     </div>
   </div>
 
+  <% if (typeof dataHealthWarnings !== 'undefined' && dataHealthWarnings.length) { %>
+    <div class="notice notice-warning" style="margin-bottom:20px;">
+      <% for (const warning of dataHealthWarnings) { %>
+        <div><%= warning %></div>
+      <% } %>
+      <% if (currentUser && currentUser.role === 'admin') { %>
+        <a href="/admin/data-health">Review Data Health</a>
+      <% } %>
+    </div>
+  <% } %>
+
   <!-- Projects -->
   <div class="page-header">
     <h2>My Projects</h2>

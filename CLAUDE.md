@@ -53,16 +53,16 @@ TransformIQ_Association/
 │   ├── database.js           # getPool() singleton + getMasterPool() for bootstrap
 │   └── storage.js            # saveUpload(), saveBuffer(), deleteUpload() — Azure or local
 ├── db/
-│   ├── schema.sql            # 20 tables, all IF NOT EXISTS; includes idempotent ALTER TABLE migrations for new columns
-│   └── init.js               # master-first bootstrap → schema run
+│   ├── schema.sql            # 20 tables, all IF NOT EXISTS; includes idempotent ALTER TABLE migrations for new columns; idempotent INSERT to ensure project owners have ProjectMembers records
+│   └── init.js               # master-first bootstrap → schema run → recoverMissingLocalSources() on every startup
 ├── middleware/
 │   ├── auth.js               # loginRequired, analystRequired, adminRequired
 │   ├── csrf.js               # token generation + POST validation
 │   └── projectAccess.js      # queries ProjectMembers, attaches req.project + req.projectMember
 ├── routes/
 │   ├── auth.js               # /login /register /logout
-│   ├── dashboard.js          # /dashboard
-│   ├── admin.js              # /admin/usage
+│   ├── dashboard.js          # /dashboard — also collects dataHealthWarnings for notice banner
+│   ├── admin.js              # /admin/usage, /admin/data-health
 │   ├── projects.js           # /projects /projects/create /projects/:id ...
 │   ├── sources.js            # /projects/:id/sources /sources/:id ...
 │   ├── entities.js           # all 8 entity types
@@ -70,8 +70,11 @@ TransformIQ_Association/
 │   ├── visualize.js          # /visualize/process-map /raci /stakeholder-map /gap-analysis /risk-heatmap
 │   ├── insights.js           # /future-state /roadmap /user-stories /acceptance-criteria /impact-matrix /voice-capture
 │   └── export.js             # /export + 5 export POST routes
+├── scripts/
+│   └── data-health.js        # CLI: node scripts/data-health.js [--repair-memberships] [--recover-sources] [--dry-run]
 ├── services/
 │   ├── ai.js                 # callClaude(), extractChunk(), callClaudeStructured(), logUsage(), isRateLimited(); exports CHUNK_SIZE, MAX_CHUNKS, MAX_TEXT_CHARS, assertAiConfigured
+│   ├── dataHealth.js         # collectDataHealth(), repairOwnerMemberships(), recoverMissingLocalSources()
 │   ├── fileParser.js         # parseFile() — PDF/DOCX/XLSX/TXT/image → { text, metadata }; Claude Vision fallback for images
 │   ├── graphBuilder.js       # buildGraphEdges() — infers relationships, inserts into GraphEdges
 │   ├── exportBuilder.js      # buildBrd(), buildFrd(), buildRiskRegister(), buildExecutiveSummary(), buildExecutiveSummaryPdf(), buildFutureState()
@@ -93,8 +96,8 @@ TransformIQ_Association/
     │   └── insights_toast.ejs # AI generation toast (spinner/success/error); included on every insight page
     ├── auth/                 # login.ejs, register.ejs
     ├── dashboard/            # home.ejs — pipeline hero + project cards
-    ├── admin/                # usage.ejs — token stats + rate limit settings
-    ├── projects/             # create.ejs, detail.ejs (sidebar layout), edit.ejs
+    ├── admin/                # usage.ejs — token stats + rate limit settings; data_health.ejs — read-only data integrity report
+    ├── projects/             # create.ejs, detail.ejs (sidebar layout), edit.ejs (archive/restore + danger zone delete)
     ├── sources/              # list.ejs, upload.ejs, detail.ejs
     ├── entities/             # Each entity type has a dedicated custom list view (no longer shared _list.ejs):
     │                         # requirements.ejs, stakeholders.ejs (with duplicate review panel + merge modal),
@@ -179,6 +182,7 @@ CSRF: every POST/PUT/DELETE request must include `_csrf` matching `req.session.c
 |---|---|---|
 | GET | `/admin/usage` | Token stats, rate limit settings |
 | POST | `/admin/usage` | Update rate limit settings in AppSettings |
+| GET | `/admin/data-health` | Read-only data integrity report (orphaned projects, unlinked files, entity rows missing sources) |
 
 ### Projects
 | Method | Path | Description |
@@ -199,9 +203,9 @@ CSRF: every POST/PUT/DELETE request must include `_csrf` matching `req.session.c
 | GET | `/projects/:id/sources` | List all sources for project |
 | GET/POST | `/projects/:id/sources/upload` | Upload new source (multer) |
 | GET | `/sources/:id` | Source detail — extracted text, entity counts |
-| POST | `/sources/:id/extract` | Run file parsing + AI extraction (chunked) |
+| POST | `/sources/:id/extract` | Run file parsing + AI extraction (chunked); viewers are blocked (403); sets `ai_status='processing'` on init |
 | POST | `/sources/:id/delete` | Delete source + file |
-| GET | `/projects/:id/sources/done-ids` | JSON API: list of source IDs with ai_status=done |
+| GET | `/projects/:id/sources/done-ids` | JSON API: list of source IDs with ai_status=done; calls `reconcileProjectSourceStatuses()` before querying |
 
 ### Entities (all 8 types)
 Entity type URL slugs: `requirements`, `stakeholders`, `processes`, `decisions`, `risks`, `business_rules`, `systems`, `kpis`
@@ -324,6 +328,10 @@ Dark mode via `[data-theme="dark"]` on `<html>`. Theme applied by inline script 
 .ec-systems       { background: #48a23f; }
 .ec-kpis          { background: #672D89; }
 ```
+
+**Danger zone:**
+- `.danger-zone` — red-tinted bordered section on project edit page (permanent delete); `border: 1px solid rgba(220,38,38,0.35)`, `background: rgba(220,38,38,0.06)`
+- `.danger-zone h3` — danger-colored heading; `.danger-zone p` — muted description text
 
 **Key component classes:**
 - `.btn-primary` / `.btn-outline` / `.btn-danger` / `.btn-sm` — button variants
@@ -529,6 +537,47 @@ Generated files saved via `config/storage.saveBuffer()` and a record inserted in
 
 **Export Hub (`views/export/index.ejs`):** card grid layout (`.export-grid`) with one card per document type; Executive Summary card shows two format buttons (Word / PDF); Future State card disabled (`.export-card-disabled`) when no insight has been generated. Export history table shows version badge, document type icon, and per-row Re-generate button.
 
+### Data Health Service (`services/dataHealth.js`)
+
+Three exported functions for detecting and repairing data integrity issues:
+
+- **`collectDataHealth(pool?)`** — gathers a full health snapshot: all projects, source DB rows, local source files, local export files, orphaned projects (no `ProjectMembers` rows at all), projects missing owner membership, entity rows referencing deleted sources. Returns `{ projects, sources, localSourceFiles, localExportFiles, sourceFilesWithoutRows, exportsWithoutDocuments, orphanedProjects, missingOwnerMemberships, entityRowsMissingSource }`.
+- **`repairOwnerMemberships(pool?)`** — inserts missing `ProjectMembers` records for project owners; returns count of rows inserted.
+- **`recoverMissingLocalSources(options)`** — auto-recovers local source files that exist on disk but have no `dbo.Sources` row. Only runs when there is exactly one active project and zero existing source rows (safe-recovery heuristic). Parses each file via `fileParser.parseFile()`, inserts a new `dbo.Sources` record with appropriate `extraction_status` and `ai_status='pending'`. Supports `dryRun: true` to preview without writing.
+
+**Startup integration:** `db/init.js` calls `recoverMissingLocalSources()` on every boot — logs recovered count, swallows errors so a failing health check never blocks startup.
+
+**Admin UI:** `GET /admin/data-health` renders `views/admin/data_health.ejs` — a read-only report showing entity counts, membership issues, unlinked files, and entity rows with missing source references. Linked from the admin navbar.
+
+**Dashboard warnings:** `routes/dashboard.js` calls `collectDataHealth()` and passes `dataHealthWarnings[]` to `views/dashboard/home.ejs`. A `.notice-warning` banner appears when there are unlinked source files on a project with zero sources, or when projects have missing membership records. Admins see a "Review Data Health" link in the banner.
+
+**CLI script:** `scripts/data-health.js` — run outside the app via `node scripts/data-health.js`. Supports `--repair-memberships` and `--recover-sources [--dry-run]` flags; always prints a JSON health summary at the end.
+
+**Schema fix:** `db/schema.sql` contains an idempotent `INSERT INTO dbo.ProjectMembers` block that runs on every boot to ensure every project owner has a membership record (fixes older/imported data that was invisible on the dashboard because the membership row was missing).
+
+### Project Edit Enhancements
+
+- **Archive / Restore toggle:** `views/projects/edit.ejs` now shows an "Archive" button for active projects and a "Restore" button for archived projects, switching based on `project.status`.
+- **Danger Zone:** A `.danger-zone` block below the edit form provides a permanent delete button (`POST /projects/:id/delete`) with a double-confirm dialog. This replaces any ambiguity about whether "archive" = "delete".
+
+### Shared Recalibration Helper (`window.tiqRunProjectRecalibration`)
+
+Defined in `views/layout.ejs`, this global JS function encapsulates the full project recalibration flow (fetch done source IDs → init extract → chunk extract → reload). Previously this logic was duplicated inline in both `views/projects/detail.ejs` and `views/entities/stakeholders.ejs`.
+
+Call signature:
+```js
+window.tiqRunProjectRecalibration({
+  button,          // the DOM button element (disabled during run)
+  projectId,       // project UUID string
+  idleText,        // button label when idle (e.g. 'Recalibrate')
+  actionText,      // prefix used during progress (e.g. 'Recalibrating')
+  emptyMessage,    // alert text when no done sources are found
+  confirmMessage,  // confirm() prompt shown before starting
+});
+```
+
+Both `recalibrateBtn` (project detail) and `regenBtn` (stakeholders page) now delegate to this helper. The button handler guard (`if (recalibrateBtn && window.tiqRunProjectRecalibration)`) ensures graceful degradation if the helper is somehow missing.
+
 ### Source Status Reconciliation
 `services/sourceStatus.js` fixes sources that are stuck in `processing` or `pending` despite having entities extracted:
 - `reconcileSingleSourceStatus(pool, sourceId)` — counts entities across all 8 tables for the source; if count > 0 and `ai_status !== 'done'`, sets `ai_status='done'`, clears `ai_error`, stores `ai_reconciled_at` timestamp in metadata
@@ -565,6 +614,7 @@ docker compose up --build -d
 ## Known Limitations / Future Work
 
 - Okta OIDC SSO not yet wired in (stubs in `.env.example`)
+- Data Health admin page is read-only — `repairOwnerMemberships` and `recoverMissingLocalSources` must be triggered via the CLI script or run automatically on startup
 - No email notifications
 - `public/uploads/` stored on container filesystem — lost on `docker compose down -v`; use Azure Blob in production
 - Puppeteer PDF generation requires Chromium inside the Docker image; cold start can be slow on first export

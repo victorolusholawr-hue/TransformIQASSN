@@ -1,0 +1,95 @@
+<div class="container">
+  <div class="page-header" style="margin-top:20px;">
+    <div>
+      <h1>Data Health</h1>
+      <p class="page-sub">Read-only checks for project membership, source files, exports, and entity references.</p>
+    </div>
+    <a href="/admin/usage" class="btn-outline">Usage</a>
+  </div>
+
+  <div class="entity-grid" style="margin-bottom:20px;">
+    <div class="entity-card">
+      <div class="entity-card-count"><%= health.projects.length %></div>
+      <div class="entity-card-label">Projects</div>
+    </div>
+    <div class="entity-card">
+      <div class="entity-card-count"><%= health.sources.length %></div>
+      <div class="entity-card-label">Source Rows</div>
+    </div>
+    <div class="entity-card">
+      <div class="entity-card-count"><%= health.localSourceFiles.length %></div>
+      <div class="entity-card-label">Source Files</div>
+    </div>
+    <div class="entity-card">
+      <div class="entity-card-count"><%= health.sourceFilesWithoutRows.length %></div>
+      <div class="entity-card-label">Unlinked Source Files</div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-bottom:20px;">
+    <div class="section-header"><h3>Project Membership</h3></div>
+    <% if (!health.orphanedProjects.length && !health.missingOwnerMemberships.length) { %>
+      <div class="empty-state"><p>No project membership issues found.</p></div>
+    <% } else { %>
+      <table class="students-table">
+        <thead><tr><th>Issue</th><th>Project</th><th>Status</th></tr></thead>
+        <tbody>
+          <% for (const p of health.orphanedProjects) { %>
+            <tr><td>Orphaned project</td><td><%= p.name %></td><td><%= p.status %></td></tr>
+          <% } %>
+          <% for (const p of health.missingOwnerMemberships) { %>
+            <tr><td>Missing owner membership</td><td><%= p.name %></td><td><%= p.status %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="section" style="margin-bottom:20px;">
+    <div class="section-header"><h3>Unlinked Source Files</h3></div>
+    <% if (!health.sourceFilesWithoutRows.length) { %>
+      <div class="empty-state"><p>No unlinked source files found.</p></div>
+    <% } else { %>
+      <table class="students-table">
+        <thead><tr><th>File</th><th>Expected URL</th></tr></thead>
+        <tbody>
+          <% for (const f of health.sourceFilesWithoutRows) { %>
+            <tr><td><%= f.name %></td><td><%= f.file_url %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="section" style="margin-bottom:20px;">
+    <div class="section-header"><h3>Unlinked Export Files</h3></div>
+    <% if (!health.exportsWithoutDocuments.length) { %>
+      <div class="empty-state"><p>No unlinked export files found.</p></div>
+    <% } else { %>
+      <table class="students-table">
+        <thead><tr><th>File</th><th>Expected URL</th></tr></thead>
+        <tbody>
+          <% for (const f of health.exportsWithoutDocuments) { %>
+            <tr><td><%= f.name %></td><td><%= f.file_url %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h3>Entity References</h3></div>
+    <% if (!health.entityRowsMissingSource.length) { %>
+      <div class="empty-state"><p>No entity rows reference missing sources.</p></div>
+    <% } else { %>
+      <table class="students-table">
+        <thead><tr><th>Table</th><th>Rows Missing Source</th></tr></thead>
+        <tbody>
+          <% for (const row of health.entityRowsMissingSource) { %>
+            <tr><td><%= row.table %></td><td><%= row.count %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+</div>

@@ -2,7 +2,20 @@
 const express = require('express');
 const { getPool, sql } = require('../config/database');
 const { adminRequired } = require('../middleware/auth');
+const { collectDataHealth } = require('../services/dataHealth');
 const router = express.Router();
+
+
+router.get('/data-health', adminRequired, async (req, res) => {
+  try {
+    const health = await collectDataHealth();
+    res.render('admin/data_health', { title: 'Data Health', health });
+  } catch (err) {
+    console.error('[admin/data-health]', err);
+    req.flash('error', 'Failed to load data health report.');
+    res.redirect('/dashboard');
+  }
+});
 
 router.get('/usage', adminRequired, async (req, res) => {
   try {
