@@ -1,0 +1,34 @@
+<div class="form-page">
+  <div class="page-header">
+    <h1>Import Project</h1>
+    <a href="/dashboard" class="btn-outline">Cancel</a>
+  </div>
+
+  <div class="card" style="margin-bottom:20px;padding:20px;">
+    <h3 style="margin:0 0 8px;">How it works</h3>
+    <ol style="margin:0;padding-left:20px;line-height:1.8;color:var(--muted);font-size:0.92rem;">
+      <li>In the <strong>source</strong> app, open the project and click <strong>Export Bundle</strong> on the project detail page.</li>
+      <li>Save the downloaded <code>.tiq.json</code> file to your computer.</li>
+      <li>Upload it below — your project, all extracted entities, AI insights, and roadmap will be recreated here.</li>
+    </ol>
+    <p style="margin:12px 0 0;font-size:0.85rem;color:var(--muted);">
+      Source <em>files</em> (PDFs, DOCX, etc.) are not transferred — only the extracted text is bundled.
+      You can re-upload source files after import if needed.
+    </p>
+  </div>
+
+  <form method="POST" action="/projects/import" enctype="multipart/form-data" class="card">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="form-group">
+      <label class="form-label">Bundle File <span style="color:var(--danger)">*</span></label>
+      <p class="form-hint" style="margin-bottom:8px;">Select a <code>.tiq.json</code> file exported from another TransformIQ Association instance.</p>
+      <input type="file" name="bundle" class="form-input" accept=".json,.tiq.json" required>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Import Project</button>
+      <a href="/dashboard" class="btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>

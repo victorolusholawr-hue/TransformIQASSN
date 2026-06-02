@@ -83,6 +83,21 @@ Missing owner memberships are auto-repaired on every app startup. Unlinked sourc
 
 Projects can be **archived** (soft-delete, hidden from active lists) or **permanently deleted** via the Danger Zone on the edit page. Deletion cascades all sources, entities, graph data, and exports.
 
+## Cross-instance project migration
+
+Projects can be moved between independently hosted instances of the app — no server-to-server connection needed.
+
+**On the source instance:**
+1. Open the project → sidebar → **Export Bundle** (under Export).
+2. Save the downloaded `<project>-<date>.tiq.json` file.
+
+**On the target instance:**
+1. Click **Import Project** in the navbar (or go to `/projects/import`).
+2. Upload the `.tiq.json` file.
+3. The project is recreated with all entities, extracted text, AI insights, and roadmap intact.
+
+Source files (PDFs, DOCX, etc.) are not transferred — only the AI-extracted text is bundled. You can re-upload source files after import if needed, but re-extraction is not required since the text is already present.
+
 ## Development
 
 ```bash

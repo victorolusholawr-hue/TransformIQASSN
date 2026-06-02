@@ -188,12 +188,15 @@ CSRF: every POST/PUT/DELETE request must include `_csrf` matching `req.session.c
 | Method | Path | Description |
 |---|---|---|
 | GET | `/projects` | List all accessible projects |
+| GET | `/projects/import` | Import project form |
+| POST | `/projects/import` | Process uploaded `.tiq.json` bundle → create project + all data |
 | GET/POST | `/projects/create` | Create project |
 | GET | `/projects/:id` | Project detail — sidebar + entity grid + members |
 | GET/POST | `/projects/:id/edit` | Edit project name/description/tags |
 | POST | `/projects/:id/delete` | Delete project + cascade all data |
 | POST | `/projects/:id/archive` | Set status=archived |
 | POST | `/projects/:id/restore` | Set status=active |
+| GET | `/projects/:id/export/bundle` | Download `.tiq.json` bundle of all project data |
 | POST | `/projects/:id/members/invite` | Add member by email |
 | POST | `/projects/:id/members/:uid/remove` | Remove member (owner only) |
 
@@ -613,6 +616,50 @@ Both `recalibrateBtn` (project detail) and `regenBtn` (stakeholders page) now de
 - `reconcileSingleSourceStatus(pool, sourceId)` — counts entities across all 8 tables for the source; if count > 0 and `ai_status !== 'done'`, sets `ai_status='done'`, clears `ai_error`, stores `ai_reconciled_at` timestamp in metadata
 - `reconcileProjectSourceStatuses(pool, projectId)` — same logic applied to all non-`done` sources in a project
 - Called automatically on: project detail load, source list load, source detail load — so stuck sources self-heal on next page view without any manual intervention
+
+### Project Export / Import (Cross-Instance Migration)
+
+Allows a complete project to be migrated between two independently hosted TransformIQ Association instances without any server-to-server connectivity.
+
+**Export — `GET /projects/:id/export/bundle`**
+- Analyst or owner only.
+- Queries: project metadata, all sources (including `extracted_text`), all 8 entity tables, AI insights, roadmap tasks.
+- Returns a JSON download: `<project-slug>-<date>.tiq.json`.
+- Graph edges are intentionally excluded — `ensureGraphEdges()` rebuilds them automatically on first graph page load.
+- Source binary files (PDFs, DOCX, etc.) are not included; only extracted text travels with the bundle.
+
+**Bundle format:**
+```json
+{
+  "format": "tiq-project-bundle",
+  "version": "1",
+  "exported_at": "ISO timestamp",
+  "project": { "name", "description", "tags", "status" },
+  "sources": [{ "id", "name", "source_type", "file_ext", "extracted_text", "extraction_status", "participants", "metadata" }],
+  "entities": { "requirements": [...], "stakeholders": [...], "processes": [...], "decisions": [...], "risks": [...], "business_rules": [...], "systems": [...], "kpis": [...] },
+  "ai_insights": [{ "type", "content", "generated_by", "generated_at" }],
+  "roadmap_tasks": [{ "phase_name", "req_title", "status", "owner", "due_date", "notes", "sort_order" }]
+}
+```
+
+**Import — `GET /projects/import` / `POST /projects/import`**
+- Analyst or admin only; any user can import into their own account.
+- Accepts `.tiq.json` via `multipart/form-data` using `multer` `memoryStorage` (max 50 MB); validated against `format === 'tiq-project-bundle'`.
+- All IDs are remapped to fresh UUIDs — no collisions with existing data.
+- `source_id` references on entities are remapped via a `sourceIdMap` built during source insertion.
+- `duplicate_candidates` / `needs_review` fields are cleared on import (stale cross-instance references).
+- Imported sources have `file_url = null`; source files must be re-uploaded manually if needed (extracted text is already present so re-extraction is not required).
+- On success: flashes a summary count and redirects to the new project detail page.
+
+**UI entry points:**
+- Navbar: "Import Project" link (all logged-in users).
+- Project detail sidebar: "Export Bundle" link (analysts/owners, under Export section).
+
+**Constants in `routes/projects.js`:**
+- `BUNDLE_FORMAT = 'tiq-project-bundle'` — format sentinel checked on import.
+- `BUNDLE_VERSION = '1'` — version field for future schema migrations.
+- `ENTITY_EXPORT_SPECS` — array defining `{ key, table, cols }` for all 8 entity types; drives both export SELECT and import INSERT.
+- `uploadBundle` — `multer` instance with `memoryStorage` and 50 MB limit.
 
 ### Project Access Control
 Three-tier access: `owner` (full control + delete), `analyst` (upload/extract/edit), `viewer` (read-only). `projectAccessRequired` middleware enforces membership on every project route. `analystRequired` blocks viewers from write operations.
